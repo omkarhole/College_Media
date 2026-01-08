@@ -11,6 +11,7 @@ import { BrowserRouter } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext.jsx";
 import { ThemeProvider } from "./context/ThemeContext.jsx";
 import { BookmarkProvider } from "./context/BookmarkContext.jsx";
+import { SocketProvider } from "./context/SocketContext.jsx";
 import "./index.css";
 import App from "./App.jsx";
 
@@ -20,9 +21,11 @@ createRoot(document.getElementById("root")).render(
       <AuthProvider>
         <ThemeProvider>
           <BookmarkProvider>
-            <BrowserRouter>
-              <App />
-            </BrowserRouter>
+            <SocketProvider>
+              <BrowserRouter>
+                <App />
+              </BrowserRouter>
+            </SocketProvider>
           </BookmarkProvider>
         </ThemeProvider>
       </AuthProvider>
