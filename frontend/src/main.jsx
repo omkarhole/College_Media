@@ -12,23 +12,27 @@ import { AuthProvider } from "./context/AuthContext.jsx";
 import { ThemeProvider } from "./context/ThemeContext.jsx";
 import { BookmarkProvider } from "./context/BookmarkContext.jsx";
 import { SocketProvider } from "./context/SocketContext.jsx";
+import { AccessibilityProvider } from "./context/AccessibilityContext.jsx";
 import "./index.css";
+import "./styles/accessibility.css";
 import App from "./App.jsx";
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>
     <HelmetProvider>
-      <AuthProvider>
-        <ThemeProvider>
-          <BookmarkProvider>
-            <SocketProvider>
-              <BrowserRouter>
-                <App />
-              </BrowserRouter>
-            </SocketProvider>
-          </BookmarkProvider>
-        </ThemeProvider>
-      </AuthProvider>
+      <AccessibilityProvider>
+        <AuthProvider>
+          <ThemeProvider>
+            <BookmarkProvider>
+              <SocketProvider>
+                <BrowserRouter>
+                  <App />
+                </BrowserRouter>
+              </SocketProvider>
+            </BookmarkProvider>
+          </ThemeProvider>
+        </AuthProvider>
+      </AccessibilityProvider>
     </HelmetProvider>
   </StrictMode>
 );
