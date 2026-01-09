@@ -34,7 +34,7 @@ export default defineConfig(({ command, mode }) => {
     ].filter(Boolean),
 
     // 🔹 Base path ONLY for production
-    base: isBuild ? "/College_Media/" : "/",
+    base: "/",
 
     // 🔹 DEV SERVER (explicit)
     server: {

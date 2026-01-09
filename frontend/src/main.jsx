@@ -27,15 +27,18 @@ createRoot(document.getElementById("root")).render(
     <HelmetProvider>
       <AccessibilityProvider>
         <AuthProvider>
-          <ThemeProvider>
-            <BookmarkProvider>
-              <SocketProvider>
-                <BrowserRouter>
-                  <App />
-                </BrowserRouter>
-              </SocketProvider>
-            </BookmarkProvider>
-          </ThemeProvider>
+          {/* Add NotificationProvider here */}
+          <NotificationProvider> 
+            <ThemeProvider>
+              <BookmarkProvider>
+                <SocketProvider>
+                  <BrowserRouter>
+                    <App />
+                  </BrowserRouter>
+                </SocketProvider>
+              </BookmarkProvider>
+            </ThemeProvider>
+          </NotificationProvider>
         </AuthProvider>
       </AccessibilityProvider>
     </HelmetProvider>
