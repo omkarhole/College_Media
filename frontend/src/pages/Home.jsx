@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
+import { posts } from "../data/post";
 
 import SkeletonPost from "../components/SkeletonPost";
 import { sortByLatest, sortByLikes } from "../utils/feedSort";
@@ -15,61 +16,6 @@ const Home = () => {
     const timer = setTimeout(() => setLoading(false), 1500);
     return () => clearTimeout(timer);
   }, []);
-
-  const posts = [
-    {
-      id: 1,
-      user: {
-        username: "X_AE_A-13",
-        handle: "@xaea13",
-        title: "Product Designer, CollegeUI",
-        avatar: "https://placehold.co/48x48/4F46E5/FFFFFF?text=XA",
-        time: "2 hours ago",
-      },
-      media:
-        "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=600&h=400&fit=crop",
-      caption:
-        "Just wrapped up an amazing group project with the best teammates! The semester might be ending, but the memories and skills we built together will last forever.",
-      hashtags: ["#campuslife", "#teamwork"],
-      likes: 127,
-      comments: 45,
-      shares: 12,
-    },
-    {
-      id: 2,
-      user: {
-        username: "StudyBuddy",
-        handle: "@studybuddies",
-        title: "Study Group Leader",
-        avatar: "https://placehold.co/48x48/10B981/FFFFFF?text=SB",
-        time: "5 hours ago",
-      },
-      media:
-        "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=600&h=400&fit=crop",
-      caption: "Late night study session at the library with amazing friends!",
-      hashtags: ["#studynight"],
-      likes: 89,
-      comments: 23,
-      shares: 5,
-    },
-    {
-      id: 3,
-      user: {
-        username: "CampusChef",
-        handle: "@campuschef",
-        title: "Food Enthusiast",
-        avatar: "https://placehold.co/48x48/EF4444/FFFFFF?text=CC",
-        time: "1 day ago",
-      },
-      media:
-        "https://images.unsplash.com/photo-1565958011703-44f9829ba187?w=600&h=400&fit=crop",
-      caption: "Experimenting with new recipes in the dorm kitchen!",
-      hashtags: ["#foodie"],
-      likes: 156,
-      comments: 34,
-      shares: 8,
-    },
-  ];
 
   const sortedPosts =
     sortType === "likes" ? sortByLikes(posts) : sortByLatest(posts);
