@@ -26,6 +26,28 @@ export default defineConfig({
     }),
   ],
   base: process.env.NODE_ENV === "production" ? "/College_Media/" : "/",
+  test: {
+    globals: true,
+    environment: "jsdom",
+    setupFiles: "./tests/setup.js",
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "json", "html", "lcov"],
+      exclude: [
+        "node_modules/",
+        "tests/",
+        "**/*.config.js",
+        "**/*.spec.js",
+        "**/*.test.js",
+      ],
+      thresholds: {
+        lines: 80,
+        functions: 80,
+        branches: 70,
+        statements: 80,
+      },
+    },
+  },
   build: {
     // Code splitting optimization
     rollupOptions: {
