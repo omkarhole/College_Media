@@ -30,11 +30,9 @@ createRoot(document.getElementById("root")).render(
           <ThemeProvider>
             <BookmarkProvider>
               <SocketProvider>
-                <NotificationProvider>
-                  <BrowserRouter>
-                    <App />
-                  </BrowserRouter>
-                </NotificationProvider>
+                <BrowserRouter>
+                  <App />
+                </BrowserRouter>
               </SocketProvider>
             </BookmarkProvider>
           </ThemeProvider>

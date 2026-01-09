@@ -3,16 +3,16 @@
  * Issue #245: Testing Infrastructure
  */
 
-import { afterEach, beforeAll, afterAll } from 'vitest';
-import { cleanup } from '@testing-library/react';
-import { setupServer } from 'msw/node';
-import { handlers } from './mocks/handlers';
-import '@testing-library/jest-dom';
+import { afterEach, beforeAll, afterAll, vi } from "vitest";
+import { cleanup } from "@testing-library/react";
+import { setupServer } from "msw/node";
+import { handlers } from "./mocks/handlers";
+import "@testing-library/jest-dom";
 
 // Setup MSW server
 export const server = setupServer(...handlers);
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterAll(() => server.close());
 afterEach(() => {
   server.resetHandlers();
@@ -20,7 +20,7 @@ afterEach(() => {
 });
 
 // Mock window.matchMedia
-Object.defineProperty(window, 'matchMedia', {
+Object.defineProperty(window, "matchMedia", {
   writable: true,
   value: vi.fn().mockImplementation((query) => ({
     matches: false,

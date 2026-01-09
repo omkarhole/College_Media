@@ -1,8 +1,7 @@
-import { useContext } from 'react';
-import { useNotifications as useNotificationContext } from '../context/NotificationContext';
+import { useNotifications as useNotificationContext } from "../context/NotificationContext";
 
 // Re-export the hook for convenience
-export { useNotifications as default } from '../context/NotificationContext';
+export { useNotifications as default } from "../context/NotificationContext";
 
 // Additional utility hooks for notifications
 
@@ -17,6 +16,7 @@ export const useNotificationPreferences = () => {
 };
 
 export const useNotificationActions = () => {
-  const { markAsRead, markAllAsRead, deleteNotification, clearAll } = useNotificationContext();
+  const { markAsRead, markAllAsRead, deleteNotification, clearAll } =
+    useNotificationContext();
   return { markAsRead, markAllAsRead, deleteNotification, clearAll };
 };

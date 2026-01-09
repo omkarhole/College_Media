@@ -1,4 +1,7 @@
-import { Link, useLocation } from "react-router-dom";
+/* eslint-disable react-refresh/only-export-components */
+import { Link, useLocation, useSearchParams } from "react-router-dom";
+// eslint-disable-next-line no-unused-vars
+import { motion } from "framer-motion";
 import collegeMediaLogo from "../assets/logos.png";
 
 function LeftSidebar() {
@@ -55,6 +58,18 @@ function LeftSidebar() {
         })}
       </nav>
 
+      {/* Course Filter - Only visible on /courses */}
+      {location.pathname === "/courses" && (
+        <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 backdrop-blur-sm">
+          <div className="flex flex-col space-y-3">
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              Filter Courses
+            </span>
+            <CourseFilterToggle />
+          </div>
+        </div>
+      )}
+
       <div className="p-4 border-t border-slate-200 dark:border-slate-700 space-y-1">
         <Link
           to="/settings"
@@ -84,6 +99,51 @@ function LeftSidebar() {
         </Link>
       </div>
     </aside>
+  );
+}
+
+// Internal Component for Filter Logic
+function CourseFilterToggle() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const currentFilter = searchParams.get("type") || "all";
+
+  const setFilter = (type) => {
+    setSearchParams({ type });
+  };
+
+  return (
+    <div className="flex bg-slate-200 dark:bg-slate-700 p-1 rounded-lg relative">
+      {/* Animated Background Pill */}
+      <motion.div
+        className="absolute h-[calc(100%-8px)] top-1 bg-white dark:bg-slate-600 rounded-md shadow-sm z-0"
+        initial={false}
+        animate={{
+          left:
+            currentFilter === "all"
+              ? "4px"
+              : currentFilter === "free"
+              ? "33%"
+              : "66%",
+          width: "32%",
+          x: currentFilter === "free" ? 2 : currentFilter === "paid" ? -2 : 0,
+        }}
+        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+      />
+
+      {["all", "free", "paid"].map((type) => (
+        <button
+          key={type}
+          onClick={() => setFilter(type)}
+          className={`flex-1 relative z-10 py-1.5 text-xs font-semibold capitalize transition-colors duration-200 ${
+            currentFilter === type
+              ? "text-slate-900 dark:text-white"
+              : "text-slate-500 dark:text-slate-400 hover:text-slate-700"
+          }`}
+        >
+          {type}
+        </button>
+      ))}
+    </div>
   );
 }
 

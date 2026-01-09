@@ -19,6 +19,7 @@ export default defineConfig([
         ...globals.browser,
         ...globals.node,
         ...globals.jest,
+        vi: "readonly",
       },
       parserOptions: {
         ecmaVersion: "latest",
@@ -28,6 +29,7 @@ export default defineConfig([
     },
     rules: {
       "no-unused-vars": ["error", { varsIgnorePattern: "^[A-Z_]" }],
+      "react-refresh/only-export-components": "warn",
     },
   },
 ]);

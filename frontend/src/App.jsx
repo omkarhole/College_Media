@@ -7,6 +7,7 @@ import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import { ErrorProvider } from "./context/ErrorContext.jsx";
 import ThemeToggle from "./components/ThemeToggle.jsx";
 import { PostSkeleton } from "./components/SkeletonLoader.jsx";
+import { NotificationProvider } from "./context/NotificationContext.jsx";
 import { useWebVitals, reportWebVitals } from "./hooks/useWebVitals.js";
 import { performanceMonitor } from "./utils/performanceMonitor.js";
 import BackButton from "./components/BackButton.jsx";
@@ -26,10 +27,15 @@ const AdvancedSyllabusPage = lazy(() =>
 const Home = lazy(() => import("./pages/Home.jsx"));
 const CreatePost = lazy(() => import("./components/CreatePost.jsx"));
 const CoursesLanding = lazy(() => import("./pages/CoursesLanding.jsx"));
+const CourseDiscovery = lazy(() => import("./pages/CourseDiscovery.jsx"));
 const LearningMode = lazy(() => import("./pages/LearningMode.jsx"));
 const Landing = lazy(() => import("./pages/Landing.jsx"));
-const NotificationCenter = lazy(() => import("./components/NotificationCenter.jsx"));
-const NotificationPreferences = lazy(() => import("./components/NotificationPreferences.jsx"));
+const NotificationCenter = lazy(() =>
+  import("./components/NotificationCenter.jsx")
+);
+const NotificationPreferences = lazy(() =>
+  import("./components/NotificationPreferences.jsx")
+);
 
 const MainLayout = ({
   children,
@@ -45,7 +51,7 @@ const MainLayout = ({
         Skip to main content
       </a>
 
-      <nav 
+      <nav
         className="bg-white dark:bg-slate-900 shadow-sm border-b border-gray-100 dark:border-slate-800 sticky top-0 z-50 transition-colors duration-300"
         role="navigation"
         aria-label="Main navigation"
@@ -60,7 +66,9 @@ const MainLayout = ({
 
             <div className="flex-1 max-w-lg mx-8">
               <div className="relative">
-                <label htmlFor="main-search" className="sr-only">Search posts and users</label>
+                <label htmlFor="main-search" className="sr-only">
+                  Search posts and users
+                </label>
                 <input
                   id="main-search"
                   type="search"
@@ -89,7 +97,7 @@ const MainLayout = ({
 
             <div className="flex items-center space-x-4">
               <ThemeToggle />
-              <button 
+              <button
                 className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-800 transition-all duration-300"
                 aria-label="User profile menu"
               >
@@ -263,125 +271,148 @@ const App = () => {
   return (
     <ErrorProvider>
       <ErrorBoundary>
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            duration: 4000,
-            style: { background: "#363636", color: "#fff" },
-            success: {
-              duration: 3000,
-              iconTheme: { primary: "#10B981", secondary: "#fff" },
-            },
-            error: {
+        <NotificationProvider>
+          <Toaster
+            position="top-right"
+            toastOptions={{
               duration: 4000,
-              iconTheme: { primary: "#EF4444", secondary: "#fff" },
-            },
-          }}
-        />
-
-        <BackButton />
-
-        <Routes>
-          <Route
-            path="/landing"
-            element={
-              <Suspense fallback={<PostSkeleton />}>
-                <Landing />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/learning"
-            element={
-              <Suspense fallback={<PostSkeleton />}>
-                <LearningMode />
-              </Suspense>
-            }
+              style: { background: "#363636", color: "#fff" },
+              success: {
+                duration: 3000,
+                iconTheme: { primary: "#10B981", secondary: "#fff" },
+              },
+              error: {
+                duration: 4000,
+                iconTheme: { primary: "#EF4444", secondary: "#fff" },
+              },
+            }}
           />
 
-          <Route
-            path="/*"
-            element={
-              <MainLayout
-                activeTab={activeTab}
-                setActiveTab={setActiveTab}
-                searchQuery={searchQuery}
-                setSearchQuery={setSearchQuery}
-              >
+          <BackButton />
+
+          <Routes>
+            <Route
+              path="/landing"
+              element={
                 <Suspense fallback={<PostSkeleton />}>
-                  <Routes>
-                    <Route
-                      path="/"
-                      element={
-                        <Home
-                          likedPosts={likedPosts}
-                          toggleLike={toggleLike}
-                          currentStoryIndex={currentStoryIndex}
-                          setCurrentStoryIndex={setCurrentStoryIndex}
-                          stories={stories}
-                          posts={posts}
-                          suggestedAccounts={suggestedAccounts}
-                          trendingHashtags={trendingHashtags}
-                          onlineFriends={onlineFriends}
-                        />
-                      }
-                    />
-                    <Route path="/reels" element={<Reels />} />
-                    <Route path="/create-post" element={<CreatePost />} />
-                    <Route path="/notifications" element={<NotificationCenter />} />
-                    <Route path="/notifications/preferences" element={<NotificationPreferences />} />
-                    <Route path="/contact" element={<ContactUs />} />
-                    <Route path="/certificate" element={<CertificatePage />} />
-                    <Route
-                      path="/assessment"
-                      element={<GamifiedAssessmentPage />}
-                    />
-                    <Route path="/courses" element={<CoursesLanding />} />
-                    <Route
-                      path="/advanced-syllabus"
-                      element={<AdvancedSyllabusPage />}
-                    />
-                  </Routes>
+                  <Landing />
                 </Suspense>
-              </MainLayout>
-            }
-          />
-        </Routes>
+              }
+            />
+            <Route
+              path="/learning"
+              element={
+                <Suspense fallback={<PostSkeleton />}>
+                  <LearningMode />
+                </Suspense>
+              }
+            />
 
-        {/* PWA Components */}
-        <InstallPWA />
-        <OfflineIndicator />
+            <Route
+              path="/*"
+              element={
+                <MainLayout
+                  activeTab={activeTab}
+                  setActiveTab={setActiveTab}
+                  searchQuery={searchQuery}
+                  setSearchQuery={setSearchQuery}
+                >
+                  <Suspense fallback={<PostSkeleton />}>
+                    <Routes>
+                      <Route
+                        path="/"
+                        element={
+                          <Home
+                            likedPosts={likedPosts}
+                            toggleLike={toggleLike}
+                            currentStoryIndex={currentStoryIndex}
+                            setCurrentStoryIndex={setCurrentStoryIndex}
+                            stories={stories}
+                            posts={posts}
+                            suggestedAccounts={suggestedAccounts}
+                            trendingHashtags={trendingHashtags}
+                            onlineFriends={onlineFriends}
+                          />
+                        }
+                      />
+                      <Route path="/reels" element={<Reels />} />
+                      <Route path="/create-post" element={<CreatePost />} />
+                      <Route
+                        path="/notifications"
+                        element={<NotificationCenter />}
+                      />
+                      <Route
+                        path="/notifications/preferences"
+                        element={<NotificationPreferences />}
+                      />
+                      <Route path="/contact" element={<ContactUs />} />
+                      <Route
+                        path="/certificate"
+                        element={<CertificatePage />}
+                      />
+                      <Route
+                        path="/assessment"
+                        element={<GamifiedAssessmentPage />}
+                      />
+                      <Route
+                        path="/certificate"
+                        element={<CertificatePage />}
+                      />
+                      <Route
+                        path="/assessment"
+                        element={<GamifiedAssessmentPage />}
+                      />
+                      <Route path="/courses" element={<CourseDiscovery />} />
+                      <Route
+                        path="/courses-landing"
+                        element={<CoursesLanding />}
+                      />
+                      <Route
+                        path="/advanced-syllabus"
+                        element={<AdvancedSyllabusPage />}
+                      />
+                    </Routes>
+                  </Suspense>
+                </MainLayout>
+              }
+            />
+          </Routes>
 
-        <style jsx global>{`
-          .scrollbar-hide::-webkit-scrollbar {
-            display: none;
-          }
-          .scrollbar-hide {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
-          }
-          .border-gradient-to-r {
-            background: linear-gradient(to right, #ec4899, #8b5cf6, #f97316);
-            border: 2px solid transparent;
-            background-clip: padding-box, border-box;
-            background-origin: padding-box, border-box;
-          }
-          
-          /* PWA Animation */
-          @keyframes slide-down {
-            from {
-              transform: translate(-50%, -100%);
-              opacity: 0;
+          {/* PWA Components */}
+          <InstallPWA />
+          <OfflineIndicator />
+
+          <style jsx global>{`
+            .scrollbar-hide::-webkit-scrollbar {
+              display: none;
             }
-            to {
-              transform: translate(-50%, 0);
-              opacity: 1;
+            .scrollbar-hide {
+              -ms-overflow-style: none;
+              scrollbar-width: none;
             }
-          }
-          .animate-slide-down {
-            animation: slide-down 0.3s ease-out;
-          }
-        `}</style>
+            .border-gradient-to-r {
+              background: linear-gradient(to right, #ec4899, #8b5cf6, #f97316);
+              border: 2px solid transparent;
+              background-clip: padding-box, border-box;
+              background-origin: padding-box, border-box;
+            }
+
+            /* PWA Animation */
+            @keyframes slide-down {
+              from {
+                transform: translate(-50%, -100%);
+                opacity: 0;
+              }
+              to {
+                transform: translate(-50%, 0);
+                opacity: 1;
+              }
+            }
+            .animate-slide-down {
+              animation: slide-down 0.3s ease-out;
+            }
+          `}</style>
+        </NotificationProvider>
       </ErrorBoundary>
     </ErrorProvider>
   );
