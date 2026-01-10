@@ -1,98 +1,62 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
 
 const Profile = () => {
-  const { user, token } = useAuth();
   const [activeTab, setActiveTab] = useState('posts');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [profileData, setProfileData] = useState(null);
-  const [userPosts, setUserPosts] = useState([]);
-
-  const fetchUserProfile = async () => {
-    try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001';
-      const response = await fetch(`${API_BASE_URL}/api/users/profile`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      const data = await response.json();
-      
-      if (data.success) {
-        setProfileData(data.data);
-      } else {
-        setError(data.message);
-      }
-    } catch (err) {
-      console.error('Profile fetch error:', err);
-      setError('Failed to load profile');
-    } finally {
-      setLoading(false);
-    }
+  
+  // Mock user data
+  const displayUser = {
+    username: 'john_doe',
+    firstName: 'John',
+    lastName: 'Doe',
+    email: 'john.doe@college.edu',
+    bio: '🎓 Computer Science Student | 💻 Tech Enthusiast | 📸 Photography Lover\nLiving life one code at a time ✨',
+    profilePicture: 'https://placehold.co/200x200/4F46E5/FFFFFF?text=JD',
   };
 
-  const fetchUserPosts = async () => {
-    try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001';
-      const response = await fetch(`${API_BASE_URL}/api/v1/posts`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      const data = await response.json();
-      
-      if (data.success) {
-        // Filter posts by current user - Post model uses 'user' field, not 'author'
-        const myPosts = data.data.filter(post => {
-          const postUserId = post.user?._id || post.user;
-          const currentUserId = profileData?._id || user?.id;
-          return postUserId?.toString() === currentUserId?.toString();
-        });
-        setUserPosts(myPosts);
-      }
-    } catch (err) {
-      console.error('Posts fetch error:', err);
-    }
-  };
-
-  useEffect(() => {
-    if (token) {
-      fetchUserProfile();
-      fetchUserPosts();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-400">Loading profile...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <p className="text-red-600 dark:text-red-400">{error}</p>
-        </div>
-      </div>
-    );
-  }
-
-  const displayUser = profileData || user;
+  // Mock posts data
+  const [userPosts] = useState([
+    {
+      _id: 1,
+      imageUrl: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=400&h=400&fit=crop',
+      likes: 234,
+      commentCount: 45
+    },
+    {
+      _id: 2,
+      imageUrl: 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=400&h=400&fit=crop',
+      likes: 189,
+      commentCount: 32
+    },
+    {
+      _id: 3,
+      imageUrl: 'https://images.unsplash.com/photo-1517486808906-6ca8b3f04846?w=400&h=400&fit=crop',
+      likes: 321,
+      commentCount: 67
+    },
+    {
+      _id: 4,
+      imageUrl: 'https://images.unsplash.com/photo-1523240795612-9a054b0db644?w=400&h=400&fit=crop',
+      likes: 412,
+      commentCount: 89
+    },
+    {
+      _id: 5,
+      imageUrl: 'https://images.unsplash.com/photo-1511367461989-f85a21fda167?w=400&h=400&fit=crop',
+      likes: 156,
+      commentCount: 23
+    },
+    {
+      _id: 6,
+      imageUrl: 'https://images.unsplash.com/photo-1543269865-cbf427effbad?w=400&h=400&fit=crop',
+      likes: 278,
+      commentCount: 54
+    },
+  ]);
   const userStats = {
-    posts: displayUser?.postCount || userPosts.length || 0,
-    followers: displayUser?.followerCount || 0,
-    following: displayUser?.followingCount || 0,
+    posts: userPosts.length,
+    followers: 1247,
+    following: 543,
   };
 
   return (
@@ -112,46 +76,46 @@ const Profile = () => {
           </div>
 
           {/* Profile Info */}
-          <div className="flex-1 space-y-6">
+          <div className="flex-1 space-y-4">
             {/* Username and Edit Button */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{displayUser?.username || 'User'}</h2>
+            <div className="flex items-center gap-6">
+              <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">{displayUser?.username || 'User'}</h2>
               <Link 
                 to="/edit-profile"
-                className="px-6 py-2 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-xl font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors duration-200"
+                className="px-5 py-1.5 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg font-semibold text-sm hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors duration-200"
               >
                 Edit Profile
               </Link>
             </div>
 
             {/* Stats */}
-            <div className="flex gap-8">
-              <div className="text-center">
-                <span className="block text-xl font-bold text-gray-900 dark:text-gray-100">{userStats.posts}</span>
-                <span className="text-sm text-gray-600 dark:text-gray-400">posts</span>
+            <div className="flex items-center gap-10">
+              <div className="flex items-center gap-1">
+                <span className="font-semibold text-gray-900 dark:text-gray-100">{userStats.posts}</span>
+                <span className="text-gray-600 dark:text-gray-400">posts</span>
               </div>
-              <button className="text-center hover:opacity-80 transition-opacity">
-                <span className="block text-xl font-bold text-gray-900 dark:text-gray-100">{userStats.followers}</span>
-                <span className="text-sm text-gray-600 dark:text-gray-400">followers</span>
+              <button className="flex items-center gap-1 hover:opacity-70 transition-opacity">
+                <span className="font-semibold text-gray-900 dark:text-gray-100">{userStats.followers.toLocaleString()}</span>
+                <span className="text-gray-600 dark:text-gray-400">followers</span>
               </button>
-              <button className="text-center hover:opacity-80 transition-opacity">
-                <span className="block text-xl font-bold text-gray-900 dark:text-gray-100">{userStats.following}</span>
-                <span className="text-sm text-gray-600 dark:text-gray-400">following</span>
+              <button className="flex items-center gap-1 hover:opacity-70 transition-opacity">
+                <span className="font-semibold text-gray-900 dark:text-gray-100">{userStats.following.toLocaleString()}</span>
+                <span className="text-gray-600 dark:text-gray-400">following</span>
               </button>
             </div>
 
             {/* Bio */}
             <div>
-              <p className="font-bold text-gray-900 dark:text-gray-100 mb-1">
+              <p className="font-semibold text-gray-900 dark:text-gray-100">
                 {displayUser?.firstName || displayUser?.lastName 
                   ? `${displayUser?.firstName || ''} ${displayUser?.lastName || ''}`.trim()
                   : displayUser?.username || 'User'}
               </p>
               {displayUser?.bio && (
-                <p className="text-gray-600 dark:text-gray-400 text-sm whitespace-pre-wrap">{displayUser.bio}</p>
+                <p className="text-gray-700 dark:text-gray-300 text-sm mt-1 whitespace-pre-wrap">{displayUser.bio}</p>
               )}
               {displayUser?.email && (
-                <p className="text-indigo-600 dark:text-indigo-400 text-sm mt-1">{displayUser.email}</p>
+                <a href={`mailto:${displayUser.email}`} className="text-indigo-600 dark:text-indigo-400 text-sm mt-1 block hover:underline">{displayUser.email}</a>
               )}
             </div>
           </div>
