@@ -4,6 +4,7 @@ const dotenv = require('dotenv');
 const path = require('path');
 const { initDB } = require('./config/db');
 const { notFound, errorHandler } = require('./middleware/errorMiddleware');
+const resumeRoutes = require('./routes/resume');
 
 dotenv.config();
 
@@ -50,6 +51,7 @@ const startServer = async () => {
   // Import and register routes
   app.use('/api/auth', require('./routes/auth'));
   app.use('/api/users', require('./routes/users'));
+  app.use('/api/resume', resumeRoutes);
   
   // 404 Not Found Handler (must be after all routes)
   app.use(notFound);
