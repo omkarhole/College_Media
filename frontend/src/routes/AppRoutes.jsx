@@ -43,6 +43,8 @@ const Stories = lazy(() => import("../pages/Stories.jsx"));
 const Explore = lazy(() => import("../pages/Explore.jsx"));
 const Trending = lazy(() => import("../pages/Trending.jsx"));
 const Feed = lazy(() => import("../pages/Feed.jsx"));
+const StudyBuddyMatcher = lazy(() => import("../pages/StudyBuddyMatcher.jsx"));
+const InstructorDashboard = lazy(() => import("../pages/InstructorDashboard.jsx"));
 
 // Protected Route wrapper
 const ProtectedRoute = ({ children }) => {
@@ -340,6 +342,24 @@ const AppRoutes = ({
           element={
             <LazyWrapper>
               <Feed />
+            </LazyWrapper>
+          }
+        />
+
+        <Route
+          path="study-buddy"
+          element={
+            <LazyWrapper>
+              <StudyBuddyMatcher />
+            </LazyWrapper>
+          }
+        />
+
+        <Route
+          path="instructor/dashboard"
+          element={
+            <LazyWrapper>
+              <InstructorDashboard />
             </LazyWrapper>
           }
         />
