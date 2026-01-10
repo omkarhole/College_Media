@@ -50,6 +50,7 @@ const startServer = async () => {
   // Import and register routes
   app.use('/api/auth', require('./routes/auth'));
   app.use('/api/users', require('./routes/users'));
+  app.use('/api/messages', require('./routes/messages'));
   
   // 404 Not Found Handler (must be after all routes)
   app.use(notFound);
