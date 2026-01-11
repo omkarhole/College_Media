@@ -5,13 +5,15 @@ import Post from "../components/Post";
 import SkeletonPost from "../components/SkeletonPost";
 import SearchFilterBar from "./SearchFilterBar";
 import { mockPosts } from "../data/post";
+import useInfiniteScroll from "../hooks/useInfiniteScroll";
 
 const PostFeed = () => {
   const [posts, setPosts] = useState([]);
   const [newPosts, setNewPosts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [copiedLink, setCopiedLink] = useState(null);
-  
+
   // Search and Filter States
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState("newest");
@@ -19,21 +21,41 @@ const PostFeed = () => {
 
   useEffect(() => {
     setTimeout(() => {
-     
+
       setPosts(mockPosts);
       setLoading(false);
     }, 1000);
   }, []);
+
+  // Infinite Scroll Handler with Throttle
+  const handleLoadMore = () => {
+    if (loadingMore) return;
+    setLoadingMore(true);
+    console.log("Loading more posts... (Throttled)");
+
+    // Simulate loading more posts
+    setTimeout(() => {
+      // Just duplicate posts for demo to show scrolling works
+      setPosts(prev => [...prev, ...mockPosts.map(p => ({ ...p, id: p.id + Date.now() }))]);
+      setLoadingMore(false);
+    }, 1500);
+  };
+
+  useInfiniteScroll(handleLoadMore, {
+    loading: loading || loadingMore,
+    hasMore: true,
+    throttleLimit: 500 // Configurable limit
+  });
 
   const handleLike = (postId) => {
     setPosts((prev) =>
       prev.map((post) =>
         post.id === postId
           ? {
-              ...post,
-              liked: !post.liked,
-              likes: post.liked ? post.likes - 1 : post.likes + 1,
-            }
+            ...post,
+            liked: !post.liked,
+            likes: post.liked ? post.likes - 1 : post.likes + 1,
+          }
           : post
       )
     );
@@ -108,12 +130,12 @@ const PostFeed = () => {
   const parseTimestamp = (timestamp) => {
     const now = new Date();
     const match = timestamp.match(/(\d+)\s+(hour|minute|day|week|month)s?\s+ago/);
-    
+
     if (!match) return now;
-    
+
     const value = parseInt(match[1]);
     const unit = match[2];
-    
+
     const date = new Date(now);
     switch (unit) {
       case "minute":
@@ -140,7 +162,7 @@ const PostFeed = () => {
   // Memoized filtered and sorted posts
   const filteredAndSortedPosts = useMemo(() => {
     let allPosts = [...newPosts, ...posts];
-    
+
     // Apply search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
@@ -150,7 +172,7 @@ const PostFeed = () => {
           post.user?.username?.toLowerCase().includes(query)
       );
     }
-    
+
     // Apply type filter
     if (filterType === "liked") {
       allPosts = allPosts.filter((post) => post.liked);
@@ -161,7 +183,7 @@ const PostFeed = () => {
         return postDate >= twentyFourHoursAgo;
       });
     }
-    
+
     // Apply sorting
     switch (sortBy) {
       case "oldest":
@@ -178,7 +200,7 @@ const PostFeed = () => {
         allPosts.sort((a, b) => parseTimestamp(b.timestamp) - parseTimestamp(a.timestamp));
         break;
     }
-    
+
     return allPosts;
   }, [posts, newPosts, searchQuery, sortBy, filterType]);
 
