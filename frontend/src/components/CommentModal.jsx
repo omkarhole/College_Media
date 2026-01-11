@@ -1,12 +1,28 @@
 import React, { useState, useEffect } from "react";
 import { commentsApi } from "../api/endpoints";
 import { useTheme } from "../context/ThemeContext";
+import useTypingIndicator from "../hooks/useTypingIndicator";
+import TypingIndicator from "./TypingIndicator";
 
 const CommentModal = ({ isOpen, onClose, postId, commentCount }) => {
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState("");
   const [loading, setLoading] = useState(false);
   const { theme } = useTheme();
+
+  // Mock user data (replace with actual user context)
+  const currentUser = {
+    id: 'user-' + Math.random().toString(36).substr(2, 9),
+    username: 'You'
+  };
+
+  // Typing indicator (socket will be null for now, simulating without backend)
+  const { typingUsers, startTyping, stopTyping } = useTypingIndicator(
+    postId,
+    currentUser.id,
+    currentUser.username,
+    null // Socket instance - pass actual socket when available
+  );
 
   // This effect runs every time the postId changes, 
   // ensuring comments stay synced with the visible reel.
@@ -15,6 +31,13 @@ const CommentModal = ({ isOpen, onClose, postId, commentCount }) => {
       setComments([]); // Clear previous comments immediately for better UX
       fetchComments();
     }
+
+    // Stop typing when modal closes
+    return () => {
+      if (isOpen) {
+        stopTyping();
+      }
+    };
   }, [isOpen, postId]); //
 
   const fetchComments = async () => {
@@ -30,9 +53,24 @@ const CommentModal = ({ isOpen, onClose, postId, commentCount }) => {
     }
   };
 
+  const handleCommentChange = (e) => {
+    setNewComment(e.target.value);
+
+    // Trigger typing indicator
+    if (e.target.value.trim()) {
+      startTyping();
+    } else {
+      stopTyping();
+    }
+  };
+
   const handlePostComment = async (e) => {
     e.preventDefault();
     if (!newComment.trim()) return;
+
+    // Stop typing indicator
+    stopTyping();
+
     try {
       const response = await commentsApi.create(postId, { content: newComment });
       if (response?.data) {
@@ -48,10 +86,9 @@ const CommentModal = ({ isOpen, onClose, postId, commentCount }) => {
   if (!isOpen) return null;
 
   return (
-    <div 
-      className={`fixed top-0 right-0 z-[1000] h-full w-full lg:w-[450px] shadow-2xl transition-transform duration-300 ease-in-out flex flex-col ${
-        isOpen ? 'translate-x-0' : 'translate-x-full'
-      } ${theme === 'dark' ? 'bg-slate-900 text-white' : 'bg-white text-gray-900'}`}
+    <div
+      className={`fixed top-0 right-0 z-[1000] h-full w-full lg:w-[450px] shadow-2xl transition-transform duration-300 ease-in-out flex flex-col ${isOpen ? 'translate-x-0' : 'translate-x-full'
+        } ${theme === 'dark' ? 'bg-slate-900 text-white' : 'bg-white text-gray-900'}`}
     >
       {/* Header */}
       <div className="flex justify-between items-center p-6 border-b dark:border-slate-800 border-gray-100">
@@ -61,7 +98,7 @@ const CommentModal = ({ isOpen, onClose, postId, commentCount }) => {
         </div>
         <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full">
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
       </div>
@@ -90,22 +127,27 @@ const CommentModal = ({ isOpen, onClose, postId, commentCount }) => {
       </div>
 
       {/* Input Area */}
-      <div className="p-6 border-t dark:border-slate-800 border-gray-100">
-        <form onSubmit={handlePostComment} className="flex flex-col gap-3">
-          <textarea
-            value={newComment}
-            onChange={(e) => setNewComment(e.target.value)}
-            placeholder="Write a comment..."
-            className={`w-full p-4 h-24 rounded-2xl resize-none outline-none border-none text-sm ${
-              theme === 'dark' ? 'bg-slate-800 text-white' : 'bg-gray-100 text-gray-900'
-            }`}
-          />
-          <div className="flex justify-end">
-            <button type="submit" disabled={!newComment.trim()} className="bg-purple-600 text-white px-8 py-2.5 rounded-full font-bold transition-all disabled:opacity-30">
-              Post
-            </button>
-          </div>
-        </form>
+      <div className="border-t dark:border-slate-800 border-gray-100">
+        {/* Typing Indicator */}
+        <TypingIndicator typingUsers={typingUsers} />
+
+        <div className="p-6">
+          <form onSubmit={handlePostComment} className="flex flex-col gap-3">
+            <textarea
+              value={newComment}
+              onChange={handleCommentChange}
+              onBlur={stopTyping}
+              placeholder="Write a comment..."
+              className={`w-full p-4 h-24 rounded-2xl resize-none outline-none border-none text-sm ${theme === 'dark' ? 'bg-slate-800 text-white' : 'bg-gray-100 text-gray-900'
+                }`}
+            />
+            <div className="flex justify-end">
+              <button type="submit" disabled={!newComment.trim()} className="bg-purple-600 text-white px-8 py-2.5 rounded-full font-bold transition-all disabled:opacity-30">
+                Post
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   );
