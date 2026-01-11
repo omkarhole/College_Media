@@ -3,6 +3,7 @@ import { FaHeart, FaRegHeart, FaLink, FaEllipsisV } from "react-icons/fa";
 import ReportButton from "./ReportButton";
 import PollDisplay from "./PollDisplay";
 import { usePollByPost } from "../hooks/usePolls";
+import ProgressiveImage from "./ProgressiveImage";
 
 const Post = ({
   post,
@@ -28,7 +29,7 @@ const Post = ({
             <p className="text-xs text-gray-500">{post.timestamp}</p>
           </div>
         </div>
-        
+
         {/* More Menu */}
         <div className="relative">
           <button
@@ -38,7 +39,7 @@ const Post = ({
           >
             <FaEllipsisV className="text-gray-600" />
           </button>
-          
+
           {showMenu && (
             <>
               <div
@@ -60,9 +61,10 @@ const Post = ({
 
       {/* Image */}
       {post.imageUrl && (
-        <img
+        <ProgressiveImage
           src={post.imageUrl}
-          alt="Post"
+          placeholder={post.thumbnailUrl} // Optional: use if available
+          alt={`Post by ${post.user.username}`}
           className="w-full object-cover"
         />
       )}
