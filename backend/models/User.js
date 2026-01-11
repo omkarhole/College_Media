@@ -75,6 +75,10 @@ const userSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   }],
+  blockedUsers: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
   notificationSettings: {
     email: {
       type: Boolean,
@@ -96,6 +100,23 @@ const userSchema = new mongoose.Schema({
       type: Boolean,
       default: true
     }
+  },
+  settings: {
+    fontSize: {
+      type: String,
+      enum: ['small', 'medium', 'large'],
+      default: 'medium'
+    },
+    theme: {
+      type: String,
+      enum: ['light', 'dark', 'auto'],
+      default: 'auto'
+    }
+  },
+  profileVisibility: {
+    type: String,
+    enum: ['public', 'followers', 'private'],
+    default: 'public'
   },
   isVerified: {
     type: Boolean,
@@ -140,7 +161,21 @@ const userSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Method to soft delete user account
+// Method to deactivate user account (temporary)
+userSchema.methods.deactivate = async function(reason = null) {
+  this.isActive = false;
+  this.deletionReason = reason; // Store reason for deactivation
+  return this.save();
+};
+
+// Method to reactivate user account
+userSchema.methods.reactivate = async function() {
+  this.isActive = true;
+  this.deletionReason = null;
+  return this.save();
+};
+
+// Method to soft delete user account (permanent with grace period)
 userSchema.methods.softDelete = async function(reason = null) {
   this.isDeleted = true;
   this.deletedAt = new Date();
@@ -159,6 +194,31 @@ userSchema.methods.restore = async function() {
   this.scheduledDeletionDate = null;
   this.isActive = true;
   return this.save();
+};
+
+// Method to block a user
+userSchema.methods.blockUser = async function(userIdToBlock) {
+  if (!this.blockedUsers.includes(userIdToBlock)) {
+    this.blockedUsers.push(userIdToBlock);
+    
+    // Also remove from followers/following if exists
+    this.followers = this.followers.filter(id => id.toString() !== userIdToBlock.toString());
+    this.following = this.following.filter(id => id.toString() !== userIdToBlock.toString());
+    
+    return this.save();
+  }
+  return this;
+};
+
+// Method to unblock a user
+userSchema.methods.unblockUser = async function(userIdToUnblock) {
+  this.blockedUsers = this.blockedUsers.filter(id => id.toString() !== userIdToUnblock.toString());
+  return this.save();
+};
+
+// Method to check if user is blocked
+userSchema.methods.isUserBlocked = function(userId) {
+  return this.blockedUsers.some(id => id.toString() === userId.toString());
 };
 
 module.exports = mongoose.model('User', userSchema);

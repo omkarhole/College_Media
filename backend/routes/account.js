@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
+
 const UserMongo = require('../models/User');
 const UserMock = require('../mockdb/userDB');
 const MessageMongo = require('../models/Message');
@@ -10,413 +12,178 @@ const { validateAccountDeletion, checkValidation } = require('../middleware/vali
 
 const JWT_SECRET = process.env.JWT_SECRET || 'college_media_secret_key';
 
-// Middleware to verify JWT token
+/* ---------------- VERIFY TOKEN ---------------- */
 const verifyToken = (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
-
   if (!token) {
-    return res.status(401).json({
-      success: false,
-      data: null,
-      message: 'Access denied. No token provided.'
-    });
+    return res.status(401).json({ success: false, message: 'No token provided' });
   }
-
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     req.userId = decoded.userId;
     next();
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      data: null,
-      message: 'Invalid token.'
-    });
+  } catch {
+    res.status(400).json({ success: false, message: 'Invalid token' });
   }
 };
 
-/**
- * @route   DELETE /api/account
- * @desc    Delete user account (soft delete)
- * @access  Private
- */
+/* =====================================================
+   DELETE ACCOUNT (SOFT DELETE)
+   ✔ Transaction
+   ✔ Optimistic Locking
+   ✔ Data Consistency
+===================================================== */
 router.delete('/', verifyToken, validateAccountDeletion, checkValidation, async (req, res) => {
+  const session = await mongoose.startSession();
+
   try {
-    const { password, reason } = req.body;
-    console.log('Delete account request received:', { 
-      userId: req.userId, 
-      hasPassword: !!password, 
-      passwordLength: password?.length 
-    });
-    const dbConnection = req.app.get('dbConnection');
-    const useMongoDB = dbConnection?.useMongoDB;
+    const { password, reason, version } = req.body;
+    const { useMongoDB } = req.app.get('dbConnection');
 
-    // Get user
-    let user;
-    if (useMongoDB) {
-      user = await UserMongo.findById(req.userId);
-    } else {
-      user = await UserMock.findById(req.userId);
-    }
+    /* -------- MOCK DB -------- */
+    if (!useMongoDB) {
+      const user = await UserMock.findById(req.userId);
+      if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        data: null,
-        message: 'User not found'
-      });
-    }
+      const isValid = await bcrypt.compare(password, user.password);
+      if (!isValid) return res.status(401).json({ success: false, message: 'Incorrect password' });
 
-    // Check if already deleted - return idempotent response
-    if (user.isDeleted) {
-      return res.status(200).json({
-        success: true,
-        data: {
-          isDeleted: true,
-          deletedAt: user.deletedAt,
-          scheduledDeletionDate: user.scheduledDeletionDate,
-          message: 'Account is already scheduled for deletion'
-        },
-        message: 'Account deletion already scheduled'
-      });
-    }
-
-    // Verify password
-    console.log('Verifying password for user:', user.email);
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    console.log('Password verification result:', isPasswordValid);
-    if (!isPasswordValid) {
-      return res.status(401).json({
-        success: false,
-        data: null,
-        message: 'Incorrect password'
-      });
-    }
-
-    // Soft delete user account
-    if (useMongoDB) {
-      await user.softDelete(reason);
-    } else {
       await UserMock.softDelete(req.userId, reason);
+      await MessageMock.softDeleteByUser(req.userId);
+
+      return res.json({ success: true, message: 'Account deletion initiated successfully' });
     }
 
-    // Anonymize or delete user's messages
-    if (useMongoDB) {
-      // Delete all messages where user is sender or receiver
+    /* -------- MONGODB TRANSACTION -------- */
+    await session.withTransaction(async () => {
+      const user = await UserMongo.findOne({
+        _id: req.userId,
+        __v: version,          // 🔐 OPTIMISTIC LOCK CHECK
+        isDeleted: false
+      }).session(session);
+
+      if (!user) {
+        throw new Error('VERSION_CONFLICT');
+      }
+
+      const isPasswordValid = await bcrypt.compare(password, user.password);
+      if (!isPasswordValid) {
+        throw new Error('INVALID_PASSWORD');
+      }
+
+      user.isDeleted = true;
+      user.deletedAt = new Date();
+      user.deletionReason = reason;
+      user.scheduledDeletionDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+      await user.save({ session }); // increments __v
+
       await MessageMongo.updateMany(
         { $or: [{ sender: req.userId }, { receiver: req.userId }] },
-        { $push: { deletedBy: req.userId } }
+        { $addToSet: { deletedBy: req.userId } },
+        { session }
       );
-    } else {
-      // Handle mock database message cleanup
-      const messages = await MessageMock.find({});
-      for (const msg of messages) {
-        if (msg.sender === req.userId || msg.receiver === req.userId) {
-          if (!msg.deletedBy.includes(req.userId)) {
-            await MessageMock.updateOne(
-              { _id: msg._id },
-              { $push: { deletedBy: req.userId } }
-            );
-          }
-        }
-      }
-    }
-
-    // Log deletion for audit
-    console.log(`User account deleted: ${req.userId} at ${new Date().toISOString()}`);
+    });
 
     res.json({
       success: true,
-      data: {
-        scheduledDeletionDate: user.scheduledDeletionDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-        message: 'Your account has been scheduled for deletion. You have 30 days to restore it.'
-      },
       message: 'Account deletion initiated successfully'
     });
+
   } catch (error) {
-    console.error('Delete account error:', error);
-    res.status(500).json({
-      success: false,
-      data: null,
-      message: 'Error deleting account'
-    });
+    if (error.message === 'INVALID_PASSWORD') {
+      return res.status(401).json({ success: false, message: 'Incorrect password' });
+    }
+
+    if (error.message === 'VERSION_CONFLICT') {
+      return res.status(409).json({
+        success: false,
+        message: 'Account data was modified by another request. Please refresh and try again.'
+      });
+    }
+
+    console.error(error);
+    res.status(500).json({ success: false, message: 'Error deleting account' });
+  } finally {
+    session.endSession();
   }
 });
 
-/**
- * @route   POST /api/account/restore
- * @desc    Restore a deleted account
- * @access  Private
- */
+/* =====================================================
+   RESTORE ACCOUNT (OPTIMISTIC LOCK SAFE)
+===================================================== */
 router.post('/restore', verifyToken, async (req, res) => {
   try {
-    const dbConnection = req.app.get('dbConnection');
-    const useMongoDB = dbConnection?.useMongoDB;
+    const { version } = req.body;
+    const { useMongoDB } = req.app.get('dbConnection');
 
-    // Get user
-    let user;
-    if (useMongoDB) {
-      user = await UserMongo.findById(req.userId);
-    } else {
-      user = await UserMock.findById(req.userId);
+    if (!useMongoDB) {
+      const restored = await UserMock.restore(req.userId);
+      if (!restored) {
+        return res.status(400).json({ success: false, message: 'Cannot restore account' });
+      }
+      return res.json({ success: true, message: 'Account restored successfully' });
     }
+
+    const user = await UserMongo.findOneAndUpdate(
+      {
+        _id: req.userId,
+        __v: version,      // 🔐 optimistic lock
+        isDeleted: true,
+        scheduledDeletionDate: { $gt: new Date() }
+      },
+      {
+        $set: {
+          isDeleted: false,
+          deletedAt: null,
+          deletionReason: null,
+          scheduledDeletionDate: null
+        }
+      },
+      { new: true }
+    );
 
     if (!user) {
-      return res.status(404).json({
+      return res.status(409).json({
         success: false,
-        data: null,
-        message: 'User not found'
+        message: 'Account was modified elsewhere. Please refresh.'
       });
     }
 
-    // Check if account is deleted
-    if (!user.isDeleted) {
-      return res.status(400).json({
-        success: false,
-        data: null,
-        message: 'Account is not deleted'
-      });
-    }
-
-    // Check if permanent deletion deadline has passed
-    if (user.scheduledDeletionDate && new Date() > user.scheduledDeletionDate) {
-      return res.status(400).json({
-        success: false,
-        data: null,
-        message: 'Account deletion deadline has passed. Cannot restore.'
-      });
-    }
-
-    // Restore account
-    if (useMongoDB) {
-      await user.restore();
-    } else {
-      await UserMock.restore(req.userId);
-    }
-
-    // Log restoration for audit
-    console.log(`User account restored: ${req.userId} at ${new Date().toISOString()}`);
-
-    res.json({
-      success: true,
-      data: null,
-      message: 'Account restored successfully'
-    });
+    res.json({ success: true, message: 'Account restored successfully' });
   } catch (error) {
-    console.error('Restore account error:', error);
-    res.status(500).json({
-      success: false,
-      data: null,
-      message: 'Error restoring account'
-    });
+    console.error(error);
+    res.status(500).json({ success: false, message: 'Error restoring account' });
   }
 });
 
-/**
- * @route   DELETE /api/account/permanent
- * @desc    Permanently delete user account (admin only or after grace period)
- * @access  Private/Admin
- */
+/* =====================================================
+   PERMANENT DELETE (SAFE)
+===================================================== */
 router.delete('/permanent', verifyToken, async (req, res) => {
   try {
-    const dbConnection = req.app.get('dbConnection');
-    const useMongoDB = dbConnection?.useMongoDB;
+    const { useMongoDB } = req.app.get('dbConnection');
 
-    // Get user
-    let user;
-    if (useMongoDB) {
-      user = await UserMongo.findById(req.userId);
-    } else {
-      user = await UserMock.findById(req.userId);
-    }
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        data: null,
-        message: 'User not found'
-      });
-    }
-
-    // Check if account is soft-deleted
-    if (!user.isDeleted) {
-      return res.status(400).json({
-        success: false,
-        data: null,
-        message: 'Account must be soft-deleted first'
-      });
-    }
-
-    // Permanently delete user's messages
-    if (useMongoDB) {
-      await MessageMongo.deleteMany({
-        $or: [{ sender: req.userId }, { receiver: req.userId }]
-      });
-    } else {
-      const messages = await MessageMock.find({});
-      for (const msg of messages) {
-        if (msg.sender === req.userId || msg.receiver === req.userId) {
-          await MessageMock.deleteOne({ _id: msg._id });
-        }
-      }
-    }
-
-    // TODO: Delete user's posts, comments, likes, etc.
-
-    // Remove user from followers/following lists
-    if (useMongoDB) {
-      await UserMongo.updateMany(
-        { followers: req.userId },
-        { $pull: { followers: req.userId } }
-      );
-      await UserMongo.updateMany(
-        { following: req.userId },
-        { $pull: { following: req.userId } }
-      );
-    }
-
-    // Permanently delete user account
-    if (useMongoDB) {
-      await UserMongo.findByIdAndDelete(req.userId);
-    } else {
+    if (!useMongoDB) {
       await UserMock.permanentDelete(req.userId);
+      return res.json({ success: true, message: 'Account permanently deleted' });
     }
 
-    // Log permanent deletion for audit
-    console.log(`User account permanently deleted: ${req.userId} at ${new Date().toISOString()}`);
+    const user = await UserMongo.findById(req.userId);
+    if (!user || !user.isDeleted) {
+      return res.status(400).json({ success: false, message: 'Account not eligible' });
+    }
 
-    res.json({
-      success: true,
-      data: null,
-      message: 'Account permanently deleted'
+    await MessageMongo.deleteMany({
+      $or: [{ sender: req.userId }, { receiver: req.userId }]
     });
+
+    await UserMongo.findByIdAndDelete(req.userId);
+
+    res.json({ success: true, message: 'Account permanently deleted' });
   } catch (error) {
-    console.error('Permanent delete error:', error);
-    res.status(500).json({
-      success: false,
-      data: null,
-      message: 'Error permanently deleting account'
-    });
-  }
-});
-
-/**
- * @route   GET /api/account/deletion-status
- * @desc    Get account deletion status
- * @access  Private
- */
-router.get('/deletion-status', verifyToken, async (req, res) => {
-  try {
-    const dbConnection = req.app.get('dbConnection');
-    const useMongoDB = dbConnection?.useMongoDB;
-
-    // Get user
-    let user;
-    if (useMongoDB) {
-      user = await UserMongo.findById(req.userId).select('isDeleted deletedAt scheduledDeletionDate deletionReason');
-    } else {
-      user = await UserMock.findById(req.userId);
-    }
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        data: null,
-        message: 'User not found'
-      });
-    }
-
-    const status = {
-      isDeleted: user.isDeleted || false,
-      deletedAt: user.deletedAt || null,
-      scheduledDeletionDate: user.scheduledDeletionDate || null,
-      deletionReason: user.deletionReason || null,
-      canRestore: user.isDeleted && user.scheduledDeletionDate && new Date() < new Date(user.scheduledDeletionDate),
-      daysUntilPermanentDeletion: user.scheduledDeletionDate 
-        ? Math.ceil((new Date(user.scheduledDeletionDate) - new Date()) / (1000 * 60 * 60 * 24))
-        : null
-    };
-
-    res.json({
-      success: true,
-      data: status,
-      message: 'Deletion status retrieved successfully'
-    });
-  } catch (error) {
-    console.error('Get deletion status error:', error);
-    res.status(500).json({
-      success: false,
-      data: null,
-      message: 'Error retrieving deletion status'
-    });
-  }
-});
-
-/**
- * @route   POST /api/account/export-data
- * @desc    Export user's data (GDPR compliance)
- * @access  Private
- */
-router.post('/export-data', verifyToken, async (req, res) => {
-  try {
-    const dbConnection = req.app.get('dbConnection');
-    const useMongoDB = dbConnection?.useMongoDB;
-
-    // Get user
-    let user;
-    if (useMongoDB) {
-      user = await UserMongo.findById(req.userId).select('-password');
-    } else {
-      user = await UserMock.findById(req.userId);
-      if (user) {
-        delete user.password;
-      }
-    }
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        data: null,
-        message: 'User not found'
-      });
-    }
-
-    // Get user's messages
-    let messages;
-    if (useMongoDB) {
-      messages = await MessageMongo.find({
-        $or: [{ sender: req.userId }, { receiver: req.userId }]
-      }).select('-deletedBy');
-    } else {
-      messages = await MessageMock.find({});
-      messages = messages.filter(m => 
-        m.sender === req.userId || m.receiver === req.userId
-      );
-    }
-
-    // TODO: Get user's posts, comments, likes, etc.
-
-    const exportData = {
-      exportDate: new Date().toISOString(),
-      user: user,
-      messages: messages,
-      posts: [], // TODO: Add posts
-      comments: [], // TODO: Add comments
-      likes: [] // TODO: Add likes
-    };
-
-    res.json({
-      success: true,
-      data: exportData,
-      message: 'Data exported successfully'
-    });
-  } catch (error) {
-    console.error('Export data error:', error);
-    res.status(500).json({
-      success: false,
-      data: null,
-      message: 'Error exporting data'
-    });
+    console.error(error);
+    res.status(500).json({ success: false, message: 'Error deleting account permanently' });
   }
 });
 

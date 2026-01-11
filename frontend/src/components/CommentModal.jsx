@@ -11,6 +11,28 @@ const CommentModal = ({ isOpen, onClose, postId, commentCount }) => {
   const [newComment, setNewComment] = useState("");
   const [loading, setLoading] = useState(false);
   const { theme } = useTheme();
+  const { modalRef } = useFocusTrap(isOpen, onClose);
+
+  // Optimistic update for comments
+  const { data: optimisticComments, optimisticUpdate: addOptimisticComment } = useOptimisticUpdate({
+    initialState: comments,
+    updateFn: async (newComments) => {
+      // The actual API call is handled in handlePostComment
+      return newComments;
+    },
+    optimisticUpdateFn: (currentComments) => {
+      // Add temporary comment with optimistic data
+      const tempComment = {
+        id: `temp-${Date.now()}`,
+        content: newComment,
+        user: { username: 'You' }, // Placeholder - should use actual user data
+        timestamp: 'Just now',
+        isOptimistic: true
+      };
+      return [...currentComments, tempComment];
+    },
+    errorMessage: 'Failed to post comment. Please try again.'
+  });
 
   const { analyze, bypass, resetModeration, warnings } = useContentModeration();
   const [showModerationModal, setShowModerationModal] = useState(false);
@@ -49,7 +71,8 @@ const CommentModal = ({ isOpen, onClose, postId, commentCount }) => {
     setLoading(true);
     try {
       const response = await commentsApi.getByPost(postId);
-      setComments(response?.data?.data || []);
+      const fetchedComments = response?.data?.data || [];
+      setComments(fetchedComments);
     } catch (error) {
       console.error("Error fetching comments:", error);
       setComments([]);
@@ -74,7 +97,11 @@ const CommentModal = ({ isOpen, onClose, postId, commentCount }) => {
     stopTyping();
 
     try {
-      const response = await commentsApi.create(postId, { content: newComment });
+      // Add optimistic comment
+      await addOptimisticComment();
+
+      // Make actual API call
+      const response = await commentsApi.create(postId, { content: commentText });
       if (response?.data) {
         const addedComment = response.data.data || response.data;
         setComments((prev) => [...prev, addedComment]);
@@ -83,6 +110,7 @@ const CommentModal = ({ isOpen, onClose, postId, commentCount }) => {
       }
     } catch (error) {
       console.error("Error posting comment:", error);
+      setNewComment(commentText); // Restore comment text on error
     }
   };
 
@@ -123,7 +151,7 @@ const CommentModal = ({ isOpen, onClose, postId, commentCount }) => {
       {/* Header */}
       <div className="flex justify-between items-center p-6 border-b dark:border-slate-800 border-gray-100">
         <div>
-          <h3 className="text-xl font-bold">Comments</h3>
+          <h3 id="modal-title" className="text-xl font-bold">Comments</h3>
           <p className="text-sm text-gray-500">{commentCount} responses</p>
         </div>
         <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full">
