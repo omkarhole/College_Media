@@ -18,7 +18,27 @@ const PORT = process.env.PORT || 5000;
 // ------------------
 // 🔐 GLOBAL MIDDLEWARES
 // ------------------
-app.use(cors());
+
+// ✅ FIXED: Proper CORS Configuration (Preflight Support)
+const corsOptions = {
+  origin: true, // allow all origins (or frontend URL)
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "X-Requested-With",
+    "Accept",
+    "X-API-Version",
+  ],
+  credentials: true,
+  optionsSuccessStatus: 204,
+};
+
+app.use(cors(corsOptions));
+
+// ✅ FIXED: Explicitly handle OPTIONS (preflight) requests
+app.options("*", cors(corsOptions));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
