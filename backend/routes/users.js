@@ -547,6 +547,266 @@ router.delete('/profile-picture', verifyToken, async (req, res, next) => {
   }
 });
 
+/**
+ * @route   GET /api/users/blocked
+ * @desc    Get list of blocked users
+ * @access  Private
+ */
+router.get('/blocked', verifyToken, async (req, res, next) => {
+  try {
+    const dbConnection = req.app.get('dbConnection');
+    const useMongoDB = dbConnection?.useMongoDB;
+
+    let blockedUsers = [];
+
+    if (useMongoDB) {
+      const user = await UserMongo.findById(req.userId)
+        .populate('blockedUsers', 'username email profilePicture firstName lastName')
+        .select('blockedUsers');
+      
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          data: null,
+          message: 'User not found'
+        });
+      }
+
+      blockedUsers = user.blockedUsers || [];
+    } else {
+      const user = UserMock.findById(req.userId);
+      
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          data: null,
+          message: 'User not found'
+        });
+      }
+
+      // Get blocked users details
+      if (user.blockedUsers && user.blockedUsers.length > 0) {
+        blockedUsers = user.blockedUsers.map(userId => {
+          const blockedUser = UserMock.findById(userId);
+          if (blockedUser) {
+            return {
+              _id: blockedUser._id,
+              username: blockedUser.username,
+              email: blockedUser.email,
+              profilePicture: blockedUser.profilePicture,
+              firstName: blockedUser.firstName,
+              lastName: blockedUser.lastName
+            };
+          }
+          return null;
+        }).filter(user => user !== null);
+      }
+    }
+
+    res.json({
+      success: true,
+      data: blockedUsers,
+      message: 'Blocked users retrieved successfully'
+    });
+  } catch (error) {
+    console.error('Get blocked users error:', error);
+    next(error);
+  }
+});
+
+/**
+ * @route   POST /api/users/:userId/block
+ * @desc    Block a user
+ * @access  Private
+ */
+router.post('/:userId/block', verifyToken, async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+
+    // Validate: Cannot block yourself
+    if (userId === req.userId) {
+      return res.status(400).json({
+        success: false,
+        data: null,
+        message: 'You cannot block yourself'
+      });
+    }
+
+    const dbConnection = req.app.get('dbConnection');
+    const useMongoDB = dbConnection?.useMongoDB;
+
+    if (useMongoDB) {
+      // Check if target user exists
+      const targetUser = await UserMongo.findById(userId);
+      if (!targetUser) {
+        return res.status(404).json({
+          success: false,
+          data: null,
+          message: 'User not found'
+        });
+      }
+
+      // Get current user and block the target user
+      const currentUser = await UserMongo.findById(req.userId);
+      if (!currentUser) {
+        return res.status(404).json({
+          success: false,
+          data: null,
+          message: 'Current user not found'
+        });
+      }
+
+      await currentUser.blockUser(userId);
+
+      // Also remove current user from target user's followers/following
+      await UserMongo.findByIdAndUpdate(userId, {
+        $pull: {
+          followers: req.userId,
+          following: req.userId
+        }
+      });
+
+      res.json({
+        success: true,
+        data: null,
+        message: 'User blocked successfully'
+      });
+    } else {
+      // Check if target user exists
+      const targetUser = UserMock.findById(userId);
+      if (!targetUser) {
+        return res.status(404).json({
+          success: false,
+          data: null,
+          message: 'User not found'
+        });
+      }
+
+      // Block the user
+      const result = UserMock.blockUser(req.userId, userId);
+      if (!result) {
+        return res.status(404).json({
+          success: false,
+          data: null,
+          message: 'Failed to block user'
+        });
+      }
+
+      // Also remove current user from target user's followers/following
+      const targetUserData = UserMock.findById(userId);
+      if (targetUserData.followers) {
+        targetUserData.followers = targetUserData.followers.filter(id => id !== req.userId);
+      }
+      if (targetUserData.following) {
+        targetUserData.following = targetUserData.following.filter(id => id !== req.userId);
+      }
+      UserMock.updateOne({ _id: userId }, targetUserData);
+
+      res.json({
+        success: true,
+        data: null,
+        message: 'User blocked successfully'
+      });
+    }
+  } catch (error) {
+    console.error('Block user error:', error);
+    next(error);
+  }
+});
+
+/**
+ * @route   DELETE /api/users/:userId/block
+ * @desc    Unblock a user
+ * @access  Private
+ */
+router.delete('/:userId/block', verifyToken, async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+
+    const dbConnection = req.app.get('dbConnection');
+    const useMongoDB = dbConnection?.useMongoDB;
+
+    if (useMongoDB) {
+      // Get current user and unblock the target user
+      const currentUser = await UserMongo.findById(req.userId);
+      if (!currentUser) {
+        return res.status(404).json({
+          success: false,
+          data: null,
+          message: 'Current user not found'
+        });
+      }
+
+      await currentUser.unblockUser(userId);
+
+      res.json({
+        success: true,
+        data: null,
+        message: 'User unblocked successfully'
+      });
+    } else {
+      // Unblock the user
+      const result = UserMock.unblockUser(req.userId, userId);
+      if (!result) {
+        return res.status(404).json({
+          success: false,
+          data: null,
+          message: 'Failed to unblock user'
+        });
+      }
+
+      res.json({
+        success: true,
+        data: null,
+        message: 'User unblocked successfully'
+      });
+    }
+  } catch (error) {
+    console.error('Unblock user error:', error);
+    next(error);
+  }
+});
+
+/**
+ * @route   GET /api/users/:userId/is-blocked
+ * @desc    Check if a user is blocked
+ * @access  Private
+ */
+router.get('/:userId/is-blocked', verifyToken, async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+
+    const dbConnection = req.app.get('dbConnection');
+    const useMongoDB = dbConnection?.useMongoDB;
+
+    let isBlocked = false;
+
+    if (useMongoDB) {
+      const currentUser = await UserMongo.findById(req.userId).select('blockedUsers');
+      if (!currentUser) {
+        return res.status(404).json({
+          success: false,
+          data: null,
+          message: 'User not found'
+        });
+      }
+
+      isBlocked = currentUser.isUserBlocked(userId);
+    } else {
+      isBlocked = UserMock.isUserBlocked(req.userId, userId);
+    }
+
+    res.json({
+      success: true,
+      data: { isBlocked },
+      message: isBlocked ? 'User is blocked' : 'User is not blocked'
+    });
+  } catch (error) {
+    console.error('Check if user is blocked error:', error);
+    next(error);
+  }
+});
+
 // Create uploads directory if it doesn't exist
 const fs = require('fs');
 if (!fs.existsSync('uploads/')) {

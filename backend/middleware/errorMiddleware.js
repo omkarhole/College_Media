@@ -1,65 +1,78 @@
 /**
  * Centralized Error Handling Middleware
- * Handles 404 and 500 errors consistently across the API
+ * Handles 404 and application errors consistently
  */
 
-// 404 Not Found Handler
+// ❌ 404 - Route Not Found Handler
 const notFound = (req, res, next) => {
   res.status(404).json({
     success: false,
-    data: null,
-    message: `Route not found: ${req.originalUrl}`
+    error: {
+      code: "ROUTE_NOT_FOUND",
+      message: `Cannot ${req.method} ${req.originalUrl}`,
+    },
   });
 };
 
-// Global Error Handler (500 Internal Server Error)
+// ❌ Global Error Handler
 const errorHandler = (err, req, res, next) => {
-  // Log error for debugging
-  console.error('Error:', err.stack);
+  // Log error (always)
+  console.error("Error:", err);
 
-  // Determine status code
-  const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
+  // Default status code
+  const statusCode = err.statusCode || res.statusCode || 500;
 
-  // Handle specific error types
-  let message = err.message || 'Internal Server Error';
+  let message = err.message || "Internal Server Error";
+  let errorCode = err.code || "INTERNAL_SERVER_ERROR";
 
-  // Mongoose validation errors
-  if (err.name === 'ValidationError') {
+  // 🟡 Mongoose Validation Error
+  if (err.name === "ValidationError") {
     message = Object.values(err.errors)
-      .map(error => error.message)
-      .join(', ');
+      .map((e) => e.message)
+      .join(", ");
+    errorCode = "VALIDATION_ERROR";
   }
 
-  // Mongoose cast errors (invalid ObjectId)
-  if (err.name === 'CastError') {
-    message = 'Invalid resource ID format';
+  // 🟡 Mongoose Cast Error (Invalid ObjectId)
+  if (err.name === "CastError") {
+    message = "Invalid resource ID format";
+    errorCode = "INVALID_ID";
   }
 
-  // JWT errors
-  if (err.name === 'JsonWebTokenError') {
-    message = 'Invalid token';
+  // 🟡 JWT Errors
+  if (err.name === "JsonWebTokenError") {
+    message = "Invalid authentication token";
+    errorCode = "INVALID_TOKEN";
   }
 
-  if (err.name === 'TokenExpiredError') {
-    message = 'Token expired';
+  if (err.name === "TokenExpiredError") {
+    message = "Authentication token expired";
+    errorCode = "TOKEN_EXPIRED";
   }
 
-  // Multer file upload errors
-  if (err.name === 'MulterError') {
-    if (err.code === 'LIMIT_FILE_SIZE') {
-      message = 'File size exceeds the 5MB limit';
+  // 🟡 Multer Errors
+  if (err.name === "MulterError") {
+    errorCode = "FILE_UPLOAD_ERROR";
+
+    if (err.code === "LIMIT_FILE_SIZE") {
+      message = "File size exceeds 5MB limit";
     } else {
-      message = `File upload error: ${err.message}`;
+      message = err.message;
     }
   }
 
-  // Send standardized error response
+  // ❌ Final standardized error response
   res.status(statusCode).json({
     success: false,
-    data: null,
-    message,
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+    error: {
+      code: errorCode,
+      message,
+      ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
+    },
   });
 };
 
-module.exports = { notFound, errorHandler };
+module.exports = {
+  notFound,
+  errorHandler,
+};
