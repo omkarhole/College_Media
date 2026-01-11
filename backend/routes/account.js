@@ -483,6 +483,141 @@ router.put('/settings', verifyToken, async (req, res) => {
 });
 
 /**
+ * @route   GET /api/account/notification-preferences
+ * @desc    Get user's notification preferences
+ * @access  Private
+ */
+router.get('/notification-preferences', verifyToken, async (req, res) => {
+  try {
+    const dbConnection = req.app.get('dbConnection');
+    const useMongoDB = dbConnection?.useMongoDB;
+
+    // Get user
+    let user;
+    if (useMongoDB) {
+      user = await UserMongo.findById(req.userId).select('notificationSettings');
+    } else {
+      user = await UserMock.findById(req.userId);
+    }
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        data: null,
+        message: 'User not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: user.notificationSettings || {
+        email: true,
+        push: true,
+        likes: true,
+        comments: true,
+        follows: true
+      },
+      message: 'Notification preferences retrieved successfully'
+    });
+  } catch (error) {
+    console.error('Get notification preferences error:', error);
+    res.status(500).json({
+      success: false,
+      data: null,
+      message: 'Error retrieving notification preferences'
+    });
+  }
+});
+
+/**
+ * @route   PUT /api/account/notification-preferences
+ * @desc    Update user's notification preferences
+ * @access  Private
+ */
+router.put('/notification-preferences', verifyToken, async (req, res) => {
+  try {
+    const dbConnection = req.app.get('dbConnection');
+    const useMongoDB = dbConnection?.useMongoDB;
+
+    const { email, push, likes, comments, follows } = req.body;
+
+    // Build the update object
+    const notificationSettings = {};
+    if (typeof email === 'boolean') notificationSettings.email = email;
+    if (typeof push === 'boolean') notificationSettings.push = push;
+    if (typeof likes === 'boolean') notificationSettings.likes = likes;
+    if (typeof comments === 'boolean') notificationSettings.comments = comments;
+    if (typeof follows === 'boolean') notificationSettings.follows = follows;
+
+    // Update user
+    let user;
+    if (useMongoDB) {
+      user = await UserMongo.findByIdAndUpdate(
+        req.userId,
+        { 
+          $set: { 
+            'notificationSettings.email': notificationSettings.email !== undefined ? notificationSettings.email : undefined,
+            'notificationSettings.push': notificationSettings.push !== undefined ? notificationSettings.push : undefined,
+            'notificationSettings.likes': notificationSettings.likes !== undefined ? notificationSettings.likes : undefined,
+            'notificationSettings.comments': notificationSettings.comments !== undefined ? notificationSettings.comments : undefined,
+            'notificationSettings.follows': notificationSettings.follows !== undefined ? notificationSettings.follows : undefined
+          }
+        },
+        { new: true }
+      ).select('notificationSettings');
+    } else {
+      user = await UserMock.findById(req.userId);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          data: null,
+          message: 'User not found'
+        });
+      }
+      
+      // Initialize notificationSettings if it doesn't exist
+      if (!user.notificationSettings) {
+        user.notificationSettings = {
+          email: true,
+          push: true,
+          likes: true,
+          comments: true,
+          follows: true
+        };
+      }
+
+      // Update notification settings
+      Object.keys(notificationSettings).forEach(key => {
+        user.notificationSettings[key] = notificationSettings[key];
+      });
+
+      await UserMock.updateOne(req.userId, user);
+    }
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        data: null,
+        message: 'User not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: useMongoDB ? user.notificationSettings : user.notificationSettings,
+      message: 'Notification preferences updated successfully'
+    });
+  } catch (error) {
+    console.error('Update notification preferences error:', error);
+    res.status(500).json({
+      success: false,
+      data: null,
+      message: 'Error updating notification preferences'
+    });
+  }
+});
+
+/**
  * @route   POST /api/account/export-data
  * @desc    Export user's data (GDPR compliance)
  * @access  Private

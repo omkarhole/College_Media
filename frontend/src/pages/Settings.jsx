@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { accountApi } from "../api/endpoints";
 import FontSizeModal from "../components/FontSizeModal";
 import ThemeModal from "../components/ThemeModal";
+import NotificationPreferencesModal from "../components/NotificationPreferencesModal";
 
 // import { useTheme } from '../context/ThemeContext';
 
@@ -25,6 +26,7 @@ const Settings = () => {
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [showFontSizeModal, setShowFontSizeModal] = useState(false);
   const [showThemeModal, setShowThemeModal] = useState(false);
+  const [showNotificationPreferences, setShowNotificationPreferences] = useState(false);
   const [passwordData, setPasswordData] = useState({
     currentPassword: "",
     newPassword: "",
@@ -479,6 +481,7 @@ const Settings = () => {
           label: "Notification Preferences",
           description: "Customize what you get notified about",
           type: "link",
+          onClick: () => setShowNotificationPreferences(true),
         },
       ],
     },
@@ -893,6 +896,11 @@ const Settings = () => {
       <ThemeModal
         isOpen={showThemeModal}
         onClose={() => setShowThemeModal(false)}
+      />
+
+      <NotificationPreferencesModal
+        isOpen={showNotificationPreferences}
+        onClose={() => setShowNotificationPreferences(false)}
       />
     </div>
   );
