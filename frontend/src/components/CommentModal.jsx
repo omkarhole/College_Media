@@ -92,7 +92,7 @@ const CommentModal = ({ isOpen, onClose, postId, commentCount }) => {
       {/* Header */}
       <div className="flex justify-between items-center p-6 border-b dark:border-slate-800 border-gray-100">
         <div>
-          <h3 className="text-xl font-bold">Comments</h3>
+          <h3 id="modal-title" className="text-xl font-bold">Comments</h3>
           <p className="text-sm text-gray-500">{commentCount} responses</p>
         </div>
         <button onClick={onClose} className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full">
