@@ -80,7 +80,6 @@ const AppRoutes = ({
           )
         }
       />
-      
       <Route
         path="/login"
         element={
@@ -154,15 +153,15 @@ const AppRoutes = ({
             </LazyWrapper>
           }
         />
-
         <Route
-          path="reels"
+          path="/reels"
           element={
             <LazyWrapper>
               <Reels />
             </LazyWrapper>
           }
         />
+        
 
         <Route
           path="create-post"
