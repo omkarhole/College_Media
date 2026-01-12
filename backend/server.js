@@ -12,7 +12,7 @@ require('./utils/redisClient'); // Initialize Redis client
 
 dotenv.config();
 
-const app = express();
+const ENV = process.env.NODE_ENV || "development";
 const PORT = process.env.PORT || 5000;
 
 // Middleware
@@ -21,8 +21,14 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Apply global rate limiter
-app.use(globalLimiter);
+/* ---------- Feature Flag Validation ---------- */
+(() => {
+  Object.entries(FEATURE_FLAGS).forEach(([k, v]) => {
+    if (typeof v !== "boolean") {
+      logger.critical("Invalid feature flag", { k, v });
+      process.exit(1);
+    }
+  });
 
 // Apply input sanitization (XSS & NoSQL injection protection)
 app.use(sanitizeAll);
@@ -36,51 +42,155 @@ app.use(preventParameterPollution(['tags', 'categories'])); // Allow arrays for 
 // Static file serving for uploaded images
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Basic route
-app.get('/', (req, res) => {
+/* ------------------
+   🐢 SLOW REQUEST LOGGER
+------------------ */
+app.use((req, res, next) => {
+  const start = Date.now();
+
+  res.on("finish", () => {
+    const duration = Date.now() - start;
+    if (duration > 5000) {
+      logger.warn("Slow request detected", {
+        method: req.method,
+        url: req.originalUrl,
+        durationMs: duration,
+      });
+    }
+  });
+
+  next();
+});
+
+/* ------------------
+   🔁 API VERSIONING
+------------------ */
+app.use((req, res, next) => {
+  req.apiVersion = req.headers["x-api-version"] || "v1";
+  res.setHeader("X-API-Version", req.apiVersion);
+  next();
+});
+
+/* ------------------
+   ⏱️ RATE LIMITING
+------------------ */
+app.use("/api", slidingWindowLimiter);
+if (FEATURE_FLAGS.ENABLE_STRICT_RATE_LIMITING) {
+  app.use("/api", globalLimiter);
+}
+
+/* ------------------
+   📁 STATIC FILES
+------------------ */
+app.use(
+  "/uploads",
+  express.static(path.join(__dirname, "uploads"), {
+    maxAge: "1h",
+    etag: true,
+  })
+);
+
+/* ------------------
+   ❤️ HEALTH CHECK
+------------------ */
+app.get("/", (req, res) => {
   res.json({
     success: true,
-    data: null,
-    message: 'College Media API is running!'
+    message: "College Media API running",
+    env: ENV,
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    cpu: os.loadavg(),
   });
 });
 
-// Initialize database connection and start server
-const startServer = async () => {
-  let dbConnection;
+/* ------------------
+   🚀 START SERVER
+------------------ */
+let dbConnection = null;
 
+const startServer = async () => {
   try {
     dbConnection = await initDB();
-
-    // Set the database connection globally so routes can access it
-    app.set('dbConnection', dbConnection);
-
-    logger.info('Database initialized successfully');
-  } catch (error) {
-    logger.error('Database initialization error:', error);
-    // Don't exit, just use mock database
-    dbConnection = { useMongoDB: false, mongoose: null };
-    app.set('dbConnection', dbConnection);
-
-    logger.warn('Using file-based database as fallback');
+    logger.info("Database connected");
+  } catch (err) {
+    logger.critical("DB connection failed", { error: err.message });
+    process.exit(1);
   }
 
-  // Import and register routes
-  app.use('/api/auth', require('./routes/auth'));
-  app.use('/api/users', require('./routes/users'));
-  app.use('/api/messages', require('./routes/messages'));
-  app.use('/api/account', require('./routes/account'));
+  /* 🔥 CACHE WARM-UP (NON-BLOCKING) */
+  setImmediate(() => {
+    warmUpCache({
+      User: require("./models/User"),
+      Resume: require("./models/Resume"),
+    });
+  });
 
-  // 404 Not Found Handler (must be after all routes)
+  /* ---------- ROUTES ---------- */
+  app.use("/api/auth", authLimiter, require("./routes/auth"));
+  app.use("/api/users", require("./routes/users"));
+
+  if (FEATURE_FLAGS.ENABLE_EXPERIMENTAL_RESUME) {
+    app.use("/api/resume", resumeRoutes);
+  }
+
+  app.use("/api/upload", uploadRoutes);
+
+  if (FEATURE_FLAGS.ENABLE_NEW_MESSAGING_FLOW) {
+    app.use("/api/messages", require("./routes/messages"));
+  }
+
+  app.use("/api/account", require("./routes/account"));
+  app.use("/api/notifications", require("./routes/notifications"));
+
   app.use(notFound);
-
-  // Global Error Handler (must be last)
   app.use(errorHandler);
 
-  // Start the server
-  app.listen(PORT, () => {
-    logger.info(`Server is running on port ${PORT}`);
+  /* ---------- SERVER TIMEOUT TUNING ---------- */
+  server.keepAliveTimeout = 120000;
+  server.headersTimeout = 130000;
+  server.requestTimeout = 0;
+
+  server.listen(PORT, () => {
+    logger.info(`Server running on port ${PORT}`);
   });
 };
 
+/* ------------------
+   🧹 GRACEFUL SHUTDOWN
+------------------ */
+const shutdown = async (signal) => {
+  logger.warn("Shutdown signal", { signal });
+
+  server.close(async () => {
+    if (dbConnection?.mongoose) {
+      await dbConnection.mongoose.connection.close(false);
+    }
+    process.exit(0);
+  });
+
+  setTimeout(() => process.exit(1), 10000);
+};
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
+
+/* ------------------
+   🧨 PROCESS SAFETY
+------------------ */
+process.on("unhandledRejection", (reason) => {
+  logger.critical("Unhandled Rejection", { reason });
+});
+
+process.on("uncaughtException", (err) => {
+  logger.critical("Uncaught Exception", {
+    message: err.message,
+    stack: err.stack,
+  });
+  process.exit(1);
+});
+
+/* ------------------
+   ▶️ BOOTSTRAP
+------------------ */
 startServer();
