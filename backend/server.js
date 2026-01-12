@@ -17,8 +17,10 @@ const os = require("os");
 /* ------------------
    🔧 INTERNAL IMPORTS
 ------------------ */
+// 🔐 Security Headers
 const helmet = require("helmet");
 const securityHeaders = require("./config/securityHeaders");
+
 
 const { initDB } = require("./config/db");
 const { notFound, errorHandler } = require("./middleware/errorMiddleware");
@@ -244,31 +246,25 @@ const shutdown = async (signal) => {
     if (dbConnection?.mongoose) {
       await dbConnection.mongoose.connection.close(false);
     }
-    process.exit(0);
-  });
 
-  setTimeout(() => process.exit(1), 10000);
+    dbConnection = await initDB();
+    app.set('dbConnection', dbConnection);
+    logger.info('Database initialized successfully');
+  } catch (error) {
+    logger.error('Database initialization error:', error);
+    dbConnection = { useMongoDB: false, mongoose: null };
+    app.set('dbConnection', dbConnection);
+    logger.warn('Using file-based database as fallback');
+  }
 };
 
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
-
-/* ------------------
-   🧨 PROCESS SAFETY
------------------- */
-process.on("unhandledRejection", (reason) => {
-  logger.critical("Unhandled Rejection", { reason });
-});
-
-process.on("uncaughtException", (err) => {
-  logger.critical("Uncaught Exception", {
-    message: err.message,
-    stack: err.stack,
+// Start server only if run directly
+if (require.main === module) {
+  connectDB().then(() => {
+    app.listen(PORT, () => {
+      logger.info(`Server is running on port ${PORT}`);
+    });
   });
-  process.exit(1);
-});
+}
 
-/* ------------------
-   ▶️ BOOTSTRAP
------------------- */
-startServer();
+module.exports = app;

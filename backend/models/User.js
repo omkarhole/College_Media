@@ -124,21 +124,7 @@ userSchema.methods.safeSave = async function () {
   }
 };
 
-/* ------------------
-   🧠 BUSINESS METHODS
------------------- */
-userSchema.methods.deactivate = async function (reason = null) {
-  this.isActive = false;
-  this.deletionReason = reason;
-  return this.safeSave();
-};
-
-userSchema.methods.reactivate = async function () {
-  this.isActive = true;
-  this.deletionReason = null;
-  return this.safeSave();
-};
-
+// Method to soft delete user account
 userSchema.methods.softDelete = async function (reason = null) {
   this.isDeleted = true;
   this.deletedAt = new Date();
@@ -150,6 +136,7 @@ userSchema.methods.softDelete = async function (reason = null) {
   return this.safeSave();
 };
 
+// Method to restore deleted account
 userSchema.methods.restore = async function () {
   this.isDeleted = false;
   this.deletedAt = null;
@@ -186,4 +173,34 @@ userSchema.methods.isUserBlocked = function (userId) {
   );
 };
 
-module.exports = mongoose.model("User", userSchema);
+// Indexes for query optimization
+// Single field indexes
+// userSchema.index({ username: 1 }); // Removed to avoid duplicate index error
+// userSchema.index({ email: 1 }); // Removed to avoid duplicate index error
+userSchema.index({ isDeleted: 1 }); // Filter deleted users
+userSchema.index({ isActive: 1 }); // Filter active users
+userSchema.index({ role: 1 }); // Filter by role
+userSchema.index({ createdAt: -1 }); // Sort by registration date
+
+// Compound indexes for common queries
+userSchema.index({ isDeleted: 1, isActive: 1 }); // Active non-deleted users
+userSchema.index({ role: 1, isActive: 1 }); // Active users by role
+userSchema.index({ username: 1, isDeleted: 1 }); // Username lookup excluding deleted
+
+// Text index for search functionality
+userSchema.index({
+  username: 'text',
+  firstName: 'text',
+  lastName: 'text',
+  bio: 'text'
+}, {
+  weights: {
+    username: 10,
+    firstName: 5,
+    lastName: 5,
+    bio: 1
+  },
+  name: 'user_text_search'
+});
+
+module.exports = mongoose.model('User', userSchema);
