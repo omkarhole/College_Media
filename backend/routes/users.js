@@ -7,8 +7,6 @@ const {
 } = require("../middleware/validationMiddleware");
 const router = express.Router();
 const jwt = require('jsonwebtoken');
-const multer = require('multer');
-const path = require('path');
 const logger = require('../utils/logger');
 const { apiLimiter } = require('../middleware/rateLimitMiddleware');
 
@@ -17,8 +15,10 @@ const { checkPermission, PERMISSIONS } = require('../middleware/rbacMiddleware')
 const { parsePaginationParams, paginateQuery } = require('../utils/pagination');
 const { cacheMiddleware, invalidateCache } = require('../middleware/cacheMiddleware');
 
-const JWT_SECRET =
-  process.env.JWT_SECRET || "college_media_secret_key";
+const { uploadProfilePicture, handleUploadError, getUploadedFileUrl } = require('../middleware/upload');
+const { deleteImage, getPublicIdFromUrl, isCloudinaryConfigured } = require('../config/cloudinary');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'college_media_secret_key';
 
 /* ------------------
    🔐 AUTH MIDDLEWARE
@@ -57,26 +57,7 @@ const authorizeSelfOrAdmin = (paramKey = "userId") => {
   }
 };
 
-/* ------------------
-   📦 MULTER SETUP
------------------- */
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, "uploads/"),
-  filename: (req, file, cb) =>
-    cb(null, Date.now() + path.extname(file.originalname)),
-});
 
-const upload = multer({
-  storage,
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only image files are allowed!'));
-    }
-  }
-});
 
 // Get current user profile
 router.get('/profile', verifyToken, cacheMiddleware({ prefix: 'user-profile', ttl: 300 }), async (req, res, next) => {
@@ -205,7 +186,7 @@ router.put('/profile', verifyToken, validateProfileUpdate, checkValidation, inva
 });
 
 // Upload profile picture
-router.post('/profile-picture', verifyToken, upload.single('profilePicture'), invalidateCache(['user-profile::userId']), async (req, res, next) => {
+router.post('/profile-picture', verifyToken, uploadProfilePicture.single('profilePicture'), handleUploadError, invalidateCache(['user-profile::userId']), async (req, res, next) => {
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -215,23 +196,47 @@ router.post('/profile-picture', verifyToken, upload.single('profilePicture'), in
       });
     }
 
+    // Get the uploaded file URL (works for both Cloudinary and local)
+    const profilePictureUrl = getUploadedFileUrl(req, req.file);
+
     // Get database connection from app
     const dbConnection = req.app.get('dbConnection');
 
     if (dbConnection && dbConnection.useMongoDB) {
-      // Use MongoDB
+      // Get old profile picture URL to delete from Cloudinary
+      const user = await UserMongo.findById(req.userId);
+      const oldPictureUrl = user?.profilePicture;
+
+      // Update user with new profile picture
       const updatedUser = await UserMongo.findByIdAndUpdate(
         req.userId,
-        { profilePicture: `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}` },
+        { profilePicture: profilePictureUrl },
         { new: true, runValidators: true }
       ).select('-password');
 
 /* =====================================================
    👤 GET CURRENT USER PROFILE
 
-    if (db?.useMongoDB) {
-      const user = await UserMongo.findById(req.userId).select(
-        "-password"
+      // Delete old image from Cloudinary (if it was a Cloudinary URL)
+      if (oldPictureUrl && isCloudinaryConfigured()) {
+        const oldPublicId = getPublicIdFromUrl(oldPictureUrl);
+        if (oldPublicId) {
+          deleteImage(oldPublicId).catch(err => logger.error('Failed to delete old image:', err));
+        }
+      }
+
+      res.json({
+        success: true,
+        data: {
+          profilePicture: updatedUser.profilePicture
+        },
+        message: 'Profile picture uploaded successfully'
+      });
+    } else {
+      // Use mock database
+      const updatedUser = await UserMock.updateProfilePicture(
+        req.userId,
+        profilePictureUrl
       );
       if (!user)
         return res
