@@ -22,6 +22,7 @@ const resumeRoutes = require("./routes/resume");
 const uploadRoutes = require("./routes/upload");
 const { globalLimiter, authLimiter } = require("./middleware/rateLimiter");
 const { slidingWindowLimiter } = require("./middleware/slidingWindowLimiter");
+const { warmUpCache } = require("./utils/cache");
 const logger = require("./utils/logger");
 
 /* ------------------
@@ -82,7 +83,6 @@ app.use(
 
 /* ------------------
    📦 BODY PARSERS
-   (Upload-safe limits)
 ------------------ */
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true, limit: "2mb" }));
@@ -91,7 +91,7 @@ app.use(express.urlencoded({ extended: true, limit: "2mb" }));
    ⏱️ REQUEST TIMEOUT GUARD
 ------------------ */
 app.use((req, res, next) => {
-  req.setTimeout(10 * 60 * 1000); // 10 minutes per request
+  req.setTimeout(10 * 60 * 1000);
   res.setTimeout(10 * 60 * 1000);
   next();
 });
@@ -172,6 +172,14 @@ const startServer = async () => {
     process.exit(1);
   }
 
+  /* 🔥 CACHE WARM-UP (NON-BLOCKING) */
+  setImmediate(() => {
+    warmUpCache({
+      User: require("./models/User"),
+      Resume: require("./models/Resume"),
+    });
+  });
+
   /* ---------- ROUTES ---------- */
   app.use("/api/auth", authLimiter, require("./routes/auth"));
   app.use("/api/users", require("./routes/users"));
@@ -192,9 +200,9 @@ const startServer = async () => {
   app.use(errorHandler);
 
   /* ---------- SERVER TIMEOUT TUNING ---------- */
-  server.keepAliveTimeout = 120000; // 2 min
-  server.headersTimeout = 130000;   // > keepAlive
-  server.requestTimeout = 0;        // disable default timeout
+  server.keepAliveTimeout = 120000;
+  server.headersTimeout = 130000;
+  server.requestTimeout = 0;
 
   server.listen(PORT, () => {
     logger.info(`Server running on port ${PORT}`);
