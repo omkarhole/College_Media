@@ -30,6 +30,18 @@ const verifyToken = (req, res, next) => {
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     req.userId = decoded.userId;
+const authorizeSelfOrAdmin = (paramKey = "userId") => {
+  return (req, res, next) => {
+    const targetId = req.params[paramKey];
+
+    // Admin override
+    if (req.currentUser.role === "admin") return next();
+
+    // Owner-only access
+    if (targetId !== req.userId) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden: You are not authorized to access this resource",
     next();
   } catch (error) {
     return res.status(401).json({
@@ -108,7 +120,6 @@ if (!fs.existsSync("uploads/")) fs.mkdirSync("uploads/");
 
 /* =====================================================
    ⚙️ UPDATE SETTINGS (CONCURRENT SAFE)
-===================================================== */
 router.put("/profile/settings", verifyToken, async (req, res, next) => {
   try {
     const { email, isPrivate, notificationSettings } = req.body;
@@ -134,7 +145,23 @@ router.put("/profile/settings", verifyToken, async (req, res, next) => {
         data: updatedUser,
         message: "Settings updated successfully",
       });
+    } catch (err) {
+      next(err);
     }
+router.put("/profile/settings", verifyToken, async (req, res, next) => {
+  try {
+    const { email, isPrivate, notificationSettings } = req.body;
+
+    if (email) req.currentUser.email = email;
+    if (typeof isPrivate !== "undefined")
+      req.currentUser.isPrivate = isPrivate;
+    if (notificationSettings)
+      req.currentUser.notificationSettings = notificationSettings;
+
+    const updatedUser =
+      typeof req.currentUser.safeSave === "function"
+        ? await req.currentUser.safeSave()
+        : await UserMock.update(req.userId, req.body);
 
     const updatedUser = await UserMock.update(req.userId, req.body);
     res.json({
