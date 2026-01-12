@@ -14,8 +14,11 @@ const fs = require("fs");
 const JWT_SECRET =
   process.env.JWT_SECRET || "college_media_secret_key";
 
-/* =====================================================
-   🔐 AUTH + AUTHZ MIDDLEWARE (IDOR SAFE)
+/* ------------------
+   🔐 AUTH MIDDLEWARE
+------------------ */
+const verifyToken = (req, res, next) => {
+  const token = req.headers.authorization?.split(" ")[1];
 
   if (!token) {
     return res.status(401).json({
@@ -27,32 +30,6 @@ const JWT_SECRET =
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     req.userId = decoded.userId;
-
-    // 🔥 Fetch current user (for role-based access)
-    const db = req.app.get("dbConnection");
-    req.currentUser = db?.useMongoDB
-      ? await UserMongo.findById(req.userId)
-      : await UserMock.findById(req.userId);
-
-    if (!req.currentUser) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid user",
-      });
-    }
-
-    next();
-  } catch {
-    return res.status(401).json({
-      success: false,
-      message: "Invalid token.",
-    });
-  }
-};
-
-/* =====================================================
-   🔒 OBJECT OWNERSHIP CHECK (IDOR FIX)
-===================================================== */
 const authorizeSelfOrAdmin = (paramKey = "userId") => {
   return (req, res, next) => {
     const targetId = req.params[paramKey];
@@ -65,11 +42,13 @@ const authorizeSelfOrAdmin = (paramKey = "userId") => {
       return res.status(403).json({
         success: false,
         message: "Forbidden: You are not authorized to access this resource",
-      });
-    }
-
     next();
-  };
+  } catch (error) {
+    return res.status(401).json({
+      success: false,
+      message: "Invalid token.",
+    });
+  }
 };
 
 /* ------------------
@@ -93,7 +72,32 @@ const upload = multer({
 if (!fs.existsSync("uploads/")) fs.mkdirSync("uploads/");
 
 /* =====================================================
-   👤 GET OWN PROFILE (IDOR SAFE)
+   👤 GET CURRENT USER PROFILE
+
+    if (db?.useMongoDB) {
+      const user = await UserMongo.findById(req.userId).select(
+        "-password"
+      );
+      if (!user)
+        return res
+          .status(404)
+          .json({ success: false, message: "User not found" });
+
+      return res.json({
+        success: true,
+        data: user,
+      });
+    }
+
+    const user = await UserMock.findById(req.userId);
+    res.json({ success: true, data: user });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/* =====================================================
+   ✏️ UPDATE PROFILE (CONCURRENT SAFE)
         });
       }
 
@@ -109,14 +113,41 @@ if (!fs.existsSync("uploads/")) fs.mkdirSync("uploads/");
         message: "Profile updated successfully",
       });
     } catch (err) {
-      next(err);
+      next(err); // 409 conflict handled globally
     }
   }
 );
 
 /* =====================================================
-   ⚙️ UPDATE OWN SETTINGS (IDOR SAFE)
-===================================================== */
+   ⚙️ UPDATE SETTINGS (CONCURRENT SAFE)
+router.put("/profile/settings", verifyToken, async (req, res, next) => {
+  try {
+    const { email, isPrivate, notificationSettings } = req.body;
+    const db = req.app.get("dbConnection");
+
+    if (db?.useMongoDB) {
+      const user = await UserMongo.findById(req.userId);
+      if (!user)
+        return res
+          .status(404)
+          .json({ success: false, message: "User not found" });
+
+      if (email) user.email = email;
+      if (typeof isPrivate !== "undefined")
+        user.isPrivate = isPrivate;
+      if (notificationSettings)
+        user.notificationSettings = notificationSettings;
+
+      const updatedUser = await user.safeSave();
+
+      return res.json({
+        success: true,
+        data: updatedUser,
+        message: "Settings updated successfully",
+      });
+    } catch (err) {
+      next(err);
+    }
 router.put("/profile/settings", verifyToken, async (req, res, next) => {
   try {
     const { email, isPrivate, notificationSettings } = req.body;
@@ -132,6 +163,7 @@ router.put("/profile/settings", verifyToken, async (req, res, next) => {
         ? await req.currentUser.safeSave()
         : await UserMock.update(req.userId, req.body);
 
+    const updatedUser = await UserMock.update(req.userId, req.body);
     res.json({
       success: true,
       data: updatedUser,
@@ -143,7 +175,7 @@ router.put("/profile/settings", verifyToken, async (req, res, next) => {
 });
 
 /* =====================================================
-   🤝 FOLLOW / UNFOLLOW (ANTI-IDOR)
+   🤝 FOLLOW / UNFOLLOW (CONCURRENT SAFE)
 ===================================================== */
 router.post(
   "/profile/:username/follow",
@@ -153,44 +185,41 @@ router.post(
       const { username } = req.params;
       const db = req.app.get("dbConnection");
 
-      const targetUser = db?.useMongoDB
-        ? await UserMongo.findOne({ username })
-        : await UserMock.findByUsername(username);
+      if (db?.useMongoDB) {
+        const targetUser = await UserMongo.findOne({ username });
+        if (!targetUser)
+          return res
+            .status(404)
+            .json({ success: false, message: "User not found" });
 
-      if (!targetUser) {
-        return res.status(404).json({
-          success: false,
-          message: "User not found",
+        const currentUser = await UserMongo.findById(req.userId);
+        const isFollowing = currentUser.following.includes(
+          targetUser._id
+        );
+
+        if (isFollowing) {
+          currentUser.following.pull(targetUser._id);
+          targetUser.followers.pull(req.userId);
+        } else {
+          currentUser.following.addToSet(targetUser._id);
+          targetUser.followers.addToSet(req.userId);
+        }
+
+        // 🔥 BOTH VERSION CHECKED
+        await currentUser.safeSave();
+        await targetUser.safeSave();
+
+        return res.json({
+          success: true,
+          data: { isFollowing: !isFollowing },
+          message: isFollowing ? "Unfollowed" : "Followed",
         });
       }
-
-      // 🔒 Prevent self-follow
-      if (targetUser._id.toString() === req.userId) {
-        return res.status(400).json({
-          success: false,
-          message: "You cannot follow yourself",
-        });
-      }
-
-      const isFollowing = req.currentUser.following.includes(
-        targetUser._id
-      );
-
-      if (isFollowing) {
-        req.currentUser.following.pull(targetUser._id);
-        targetUser.followers.pull(req.userId);
-      } else {
-        req.currentUser.following.addToSet(targetUser._id);
-        targetUser.followers.addToSet(req.userId);
-      }
-
-      await req.currentUser.safeSave();
-      await targetUser.safeSave();
 
       res.json({
         success: true,
-        data: { isFollowing: !isFollowing },
-        message: isFollowing ? "Unfollowed" : "Followed",
+        data: { isFollowing: true },
+        message: "Follow action completed",
       });
     } catch (err) {
       next(err);
