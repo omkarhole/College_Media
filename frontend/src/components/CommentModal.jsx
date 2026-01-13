@@ -5,6 +5,8 @@ import useTypingIndicator from "../hooks/useTypingIndicator";
 import TypingIndicator from "./TypingIndicator";
 import useContentModeration from "../hooks/useContentModeration";
 import ModerationWarning from "./ModerationWarning";
+import useFocusTrap from "../hooks/useFocusTrap";
+import useOptimisticUpdate from "../hooks/useOptimisticUpdate";
 
 const CommentModal = ({ isOpen, onClose, postId, commentCount }) => {
   const [comments, setComments] = useState([]);
