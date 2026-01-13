@@ -1,94 +1,177 @@
 const mongoose = require('mongoose');
 
 const postSchema = new mongoose.Schema({
-    author: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true,
-        index: true
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    index: true
+  },
+  content: {
+    type: String,
+    required: true,
+    maxlength: 5000,
+    trim: true
+  },
+  postType: {
+    type: String,
+    enum: ['text', 'photo', 'video', 'poll', 'shared'],
+    default: 'text'
+  },
+  media: [{
+    type: {
+      type: String,
+      enum: ['image', 'video'],
     },
-    content: {
-        type: String,
-        required: true,
-        maxlength: 5000
+    url: {
+      type: String,
+      required: true
     },
-    images: [{
-        url: String,
-        publicId: String // For Cloudinary deletion
-    }],
-    tags: [{
-        type: String,
-        lowercase: true,
-        trim: true
-    }],
-    likes: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User'
-    }],
-    likesCount: {
-        type: Number,
-        default: 0
-    },
-    comments: [{
-        author: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: 'User'
+    thumbnail: String,
+    alt: String
+  }],
+  poll: {
+    question: String,
+    options: [{
+      text: String,
+      votes: [{
+        user: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User'
         },
-        content: {
-            type: String,
-            maxlength: 1000
-        },
-        createdAt: {
-            type: Date,
-            default: Date.now
+        votedAt: {
+          type: Date,
+          default: Date.now
         }
+      }]
     }],
-    commentsCount: {
-        type: Number,
-        default: 0
-    },
-    shares: {
-        type: Number,
-        default: 0
-    },
-    visibility: {
-        type: String,
-        enum: ['public', 'followers', 'private'],
-        default: 'public'
-    },
-    isDeleted: {
-        type: Boolean,
-        default: false
+    endsAt: Date,
+    allowMultipleVotes: {
+      type: Boolean,
+      default: false
     }
+  },
+  likes: [{
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    likedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  likesCount: {
+    type: Number,
+    default: 0
+  },
+  commentsCount: {
+    type: Number,
+    default: 0
+  },
+  sharesCount: {
+    type: Number,
+    default: 0
+  },
+  viewsCount: {
+    type: Number,
+    default: 0
+  },
+  sharedPost: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Post'
+  },
+  visibility: {
+    type: String,
+    enum: ['public', 'followers', 'private'],
+    default: 'public'
+  },
+  tags: [{
+    type: String,
+    trim: true,
+    lowercase: true
+  }],
+  mentions: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
+  location: {
+    name: String,
+    coordinates: {
+      type: [Number], // [longitude, latitude]
+      index: '2dsphere'
+    }
+  },
+  isPinned: {
+    type: Boolean,
+    default: false
+  },
+  isEdited: {
+    type: Boolean,
+    default: false
+  },
+  editedAt: Date,
+  isDeleted: {
+    type: Boolean,
+    default: false
+  },
+  deletedAt: Date
 }, {
-    timestamps: true
+  timestamps: true
 });
 
-// Update counts when likes/comments change
-postSchema.methods.updateCounts = async function () {
-    this.likesCount = this.likes.length;
-    this.commentsCount = this.comments.length;
-    return this.save();
+// Indexes for better query performance
+postSchema.index({ user: 1, createdAt: -1 });
+postSchema.index({ createdAt: -1 });
+postSchema.index({ tags: 1 });
+postSchema.index({ 'location.coordinates': '2dsphere' });
+
+// Virtual for checking if user liked the post
+postSchema.virtual('isLiked').get(function() {
+  return false; // Will be set in the route handler based on current user
+});
+
+// Method to toggle like
+postSchema.methods.toggleLike = async function(userId) {
+  const likeIndex = this.likes.findIndex(
+    like => like.user.toString() === userId.toString()
+  );
+
+  if (likeIndex > -1) {
+    // Unlike
+    this.likes.splice(likeIndex, 1);
+    this.likesCount = Math.max(0, this.likesCount - 1);
+  } else {
+    // Like
+    this.likes.push({ user: userId });
+    this.likesCount += 1;
+  }
+
+  return this.save();
 };
 
-// Indexes for query optimization
-postSchema.index({ author: 1, createdAt: -1 }); // User's posts sorted by date
-postSchema.index({ createdAt: -1 }); // Recent posts
-postSchema.index({ likesCount: -1 }); // Popular posts
-postSchema.index({ tags: 1 }); // Search by tag
-postSchema.index({ visibility: 1, isDeleted: 1 }); // Public non-deleted posts
-postSchema.index({ isDeleted: 1, createdAt: -1 }); // Active posts sorted
+// Method to increment comments count
+postSchema.methods.incrementCommentsCount = async function() {
+  this.commentsCount += 1;
+  return this.save();
+};
 
-// Text index for full-text search
-postSchema.index({
-    content: 'text',
-    tags: 'text'
-}, {
-    weights: {
-        tags: 10,
-        content: 5
-    },
-    name: 'post_text_search'
-});
+// Method to decrement comments count
+postSchema.methods.decrementCommentsCount = async function() {
+  this.commentsCount = Math.max(0, this.commentsCount - 1);
+  return this.save();
+};
+
+// Method to increment shares count
+postSchema.methods.incrementSharesCount = async function() {
+  this.sharesCount += 1;
+  return this.save();
+};
+
+// Method to increment views count
+postSchema.methods.incrementViewsCount = async function() {
+  this.viewsCount += 1;
+  return this.save();
+};
 
 module.exports = mongoose.model('Post', postSchema);

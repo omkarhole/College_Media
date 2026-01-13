@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
+
 const UserMongo = require('../models/User');
 const UserMock = require('../mockdb/userDB');
 const MessageMongo = require('../models/Message');
@@ -16,28 +18,18 @@ const { checkPermission, PERMISSIONS } = require('../middleware/rbacMiddleware')
 
 const JWT_SECRET = process.env.JWT_SECRET || 'college_media_secret_key';
 
-// Middleware to verify JWT token
+/* ---------------- VERIFY TOKEN ---------------- */
 const verifyToken = (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
-
   if (!token) {
-    return res.status(401).json({
-      success: false,
-      data: null,
-      message: 'Access denied. No token provided.'
-    });
+    return res.status(401).json({ success: false, message: 'No token provided' });
   }
-
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     req.userId = decoded.userId;
     next();
-  } catch (error) {
-    res.status(400).json({
-      success: false,
-      data: null,
-      message: 'Invalid token.'
-    });
+  } catch {
+    res.status(400).json({ success: false, message: 'Invalid token' });
   }
 };
 
@@ -247,35 +239,16 @@ router.delete('/', verifyToken, sensitiveLimiter, validateAccountDeletion, check
     const dbConnection = req.app.get('dbConnection');
     const useMongoDB = dbConnection?.useMongoDB;
 
-    // Get user
-    let user;
-    if (useMongoDB) {
-      user = await UserMongo.findById(req.userId);
-    } else {
-      user = await UserMock.findById(req.userId);
-    }
+    /* -------- MOCK DB -------- */
+    if (!useMongoDB) {
+      const user = await UserMock.findById(req.userId);
+      if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        data: null,
-        message: 'User not found'
-      });
-    }
+      const isValid = await bcrypt.compare(password, user.password);
+      if (!isValid) return res.status(401).json({ success: false, message: 'Incorrect password' });
 
-    // Check if already deleted - return idempotent response
-    if (user.isDeleted) {
-      return res.status(200).json({
-        success: true,
-        data: {
-          isDeleted: true,
-          deletedAt: user.deletedAt,
-          scheduledDeletionDate: user.scheduledDeletionDate,
-          message: 'Account is already scheduled for deletion'
-        },
-        message: 'Account deletion already scheduled'
-      });
-    }
+      await UserMock.softDelete(req.userId, reason);
+      await MessageMock.softDeleteByUser(req.userId);
 
     // Verify password
     logger.info('Verifying password for user:', { email: user.email });
@@ -289,19 +262,34 @@ router.delete('/', verifyToken, sensitiveLimiter, validateAccountDeletion, check
       });
     }
 
-    // Soft delete user account
-    if (useMongoDB) {
-      await user.softDelete(reason);
-    } else {
-      await UserMock.softDelete(req.userId, reason);
-    }
+    /* -------- MONGODB TRANSACTION -------- */
+    await session.withTransaction(async () => {
+      const user = await UserMongo.findOne({
+        _id: req.userId,
+        __v: version,          // 🔐 OPTIMISTIC LOCK CHECK
+        isDeleted: false
+      }).session(session);
 
-    // Anonymize or delete user's messages
-    if (useMongoDB) {
-      // Delete all messages where user is sender or receiver
+      if (!user) {
+        throw new Error('VERSION_CONFLICT');
+      }
+
+      const isPasswordValid = await bcrypt.compare(password, user.password);
+      if (!isPasswordValid) {
+        throw new Error('INVALID_PASSWORD');
+      }
+
+      user.isDeleted = true;
+      user.deletedAt = new Date();
+      user.deletionReason = reason;
+      user.scheduledDeletionDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+      await user.save({ session }); // increments __v
+
       await MessageMongo.updateMany(
         { $or: [{ sender: req.userId }, { receiver: req.userId }] },
-        { $push: { deletedBy: req.userId } }
+        { $addToSet: { deletedBy: req.userId } },
+        { session }
       );
     } else {
       // Handle mock database message cleanup
@@ -323,10 +311,6 @@ router.delete('/', verifyToken, sensitiveLimiter, validateAccountDeletion, check
 
     res.json({
       success: true,
-      data: {
-        scheduledDeletionDate: user.scheduledDeletionDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-        message: 'Your account has been scheduled for deletion. You have 30 days to restore it.'
-      },
       message: 'Account deletion initiated successfully'
     });
   } catch (error) {
@@ -365,21 +349,15 @@ router.post('/restore', verifyToken, apiLimiter, async (req, res) => {
       });
     }
 
-    // Check if account is deleted
-    if (!user.isDeleted) {
-      return res.status(400).json({
-        success: false,
-        data: null,
-        message: 'Account is not deleted'
-      });
+  } catch (error) {
+    if (error.message === 'INVALID_PASSWORD') {
+      return res.status(401).json({ success: false, message: 'Incorrect password' });
     }
 
-    // Check if permanent deletion deadline has passed
-    if (user.scheduledDeletionDate && new Date() > user.scheduledDeletionDate) {
-      return res.status(400).json({
+    if (error.message === 'VERSION_CONFLICT') {
+      return res.status(409).json({
         success: false,
-        data: null,
-        message: 'Account deletion deadline has passed. Cannot restore.'
+        message: 'Account data was modified by another request. Please refresh and try again.'
       });
     }
 
@@ -415,46 +393,15 @@ router.post('/restore', verifyToken, apiLimiter, async (req, res) => {
  */
 router.delete('/permanent', verifyToken, sensitiveLimiter, async (req, res) => {
   try {
-    const dbConnection = req.app.get('dbConnection');
-    const useMongoDB = dbConnection?.useMongoDB;
+    const { version } = req.body;
+    const { useMongoDB } = req.app.get('dbConnection');
 
-    // Get user
-    let user;
-    if (useMongoDB) {
-      user = await UserMongo.findById(req.userId);
-    } else {
-      user = await UserMock.findById(req.userId);
-    }
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        data: null,
-        message: 'User not found'
-      });
-    }
-
-    // Check if account is soft-deleted
-    if (!user.isDeleted) {
-      return res.status(400).json({
-        success: false,
-        data: null,
-        message: 'Account must be soft-deleted first'
-      });
-    }
-
-    // Permanently delete user's messages
-    if (useMongoDB) {
-      await MessageMongo.deleteMany({
-        $or: [{ sender: req.userId }, { receiver: req.userId }]
-      });
-    } else {
-      const messages = await MessageMock.find({});
-      for (const msg of messages) {
-        if (msg.sender === req.userId || msg.receiver === req.userId) {
-          await MessageMock.deleteOne({ _id: msg._id });
-        }
+    if (!useMongoDB) {
+      const restored = await UserMock.restore(req.userId);
+      if (!restored) {
+        return res.status(400).json({ success: false, message: 'Cannot restore account' });
       }
+      return res.json({ success: true, message: 'Account restored successfully' });
     }
 
     // TODO: Delete user's posts, comments, likes, etc.
@@ -515,10 +462,9 @@ router.get('/deletion-status', verifyToken, apiLimiter, async (req, res) => {
     }
 
     if (!user) {
-      return res.status(404).json({
+      return res.status(409).json({
         success: false,
-        data: null,
-        message: 'User not found'
+        message: 'Account was modified elsewhere. Please refresh.'
       });
     }
 
@@ -555,26 +501,11 @@ router.get('/deletion-status', verifyToken, apiLimiter, async (req, res) => {
  */
 router.post('/export-data', verifyToken, sensitiveLimiter, async (req, res) => {
   try {
-    const dbConnection = req.app.get('dbConnection');
-    const useMongoDB = dbConnection?.useMongoDB;
+    const { useMongoDB } = req.app.get('dbConnection');
 
-    // Get user
-    let user;
-    if (useMongoDB) {
-      user = await UserMongo.findById(req.userId).select('-password');
-    } else {
-      user = await UserMock.findById(req.userId);
-      if (user) {
-        delete user.password;
-      }
-    }
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        data: null,
-        message: 'User not found'
-      });
+    if (!useMongoDB) {
+      await UserMock.permanentDelete(req.userId);
+      return res.json({ success: true, message: 'Account permanently deleted' });
     }
 
     // Get user's messages
@@ -590,22 +521,13 @@ router.post('/export-data', verifyToken, sensitiveLimiter, async (req, res) => {
       );
     }
 
-    // TODO: Get user's posts, comments, likes, etc.
-
-    const exportData = {
-      exportDate: new Date().toISOString(),
-      user: user,
-      messages: messages,
-      posts: [], // TODO: Add posts
-      comments: [], // TODO: Add comments
-      likes: [] // TODO: Add likes
-    };
-
-    res.json({
-      success: true,
-      data: exportData,
-      message: 'Data exported successfully'
+    await MessageMongo.deleteMany({
+      $or: [{ sender: req.userId }, { receiver: req.userId }]
     });
+
+    await UserMongo.findByIdAndDelete(req.userId);
+
+    res.json({ success: true, message: 'Account permanently deleted' });
   } catch (error) {
     logger.error('Export data error:', error);
     res.status(500).json({
@@ -613,6 +535,98 @@ router.post('/export-data', verifyToken, sensitiveLimiter, async (req, res) => {
       data: null,
       message: 'Error exporting data'
     });
+  }
+});
+
+/* =====================================================
+   GET USER SETTINGS
+===================================================== */
+router.get('/settings', verifyToken, async (req, res) => {
+  try {
+    const { useMongoDB } = req.app.get('dbConnection');
+
+    const user = useMongoDB
+      ? await UserMongo.findById(req.userId).select('settings')
+      : await UserMock.findById(req.userId);
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    // Return default settings if none exist
+    const settings = user.settings || {
+      fontSize: 'medium',
+      theme: 'auto',
+      notifications: {
+        email: true,
+        push: true,
+        inApp: true
+      },
+      privacy: {
+        profileVisibility: 'public',
+        showEmail: false,
+        showPhone: false
+      }
+    };
+
+    res.json({
+      success: true,
+      data: settings
+    });
+  } catch (error) {
+    console.error('Error fetching settings:', error);
+    res.status(500).json({ success: false, message: 'Error fetching settings' });
+  }
+});
+
+/* =====================================================
+   UPDATE USER SETTINGS
+===================================================== */
+router.put('/settings', verifyToken, async (req, res) => {
+  try {
+    const { useMongoDB } = req.app.get('dbConnection');
+    const { fontSize, theme, notifications, privacy } = req.body;
+
+    const updateData = {};
+    if (fontSize) updateData['settings.fontSize'] = fontSize;
+    if (theme) updateData['settings.theme'] = theme;
+    if (notifications) updateData['settings.notifications'] = notifications;
+    if (privacy) updateData['settings.privacy'] = privacy;
+
+    if (useMongoDB) {
+      const user = await UserMongo.findByIdAndUpdate(
+        req.userId,
+        { $set: updateData },
+        { new: true, runValidators: true }
+      ).select('settings');
+
+      if (!user) {
+        return res.status(404).json({ success: false, message: 'User not found' });
+      }
+
+      res.json({
+        success: true,
+        data: user.settings,
+        message: 'Settings updated successfully'
+      });
+    } else {
+      const user = await UserMock.findById(req.userId);
+      if (!user) {
+        return res.status(404).json({ success: false, message: 'User not found' });
+      }
+
+      user.settings = { ...user.settings, ...req.body };
+      await UserMock.update(req.userId, user);
+
+      res.json({
+        success: true,
+        data: user.settings,
+        message: 'Settings updated successfully'
+      });
+    }
+  } catch (error) {
+    console.error('Error updating settings:', error);
+    res.status(500).json({ success: false, message: 'Error updating settings' });
   }
 });
 

@@ -21,20 +21,21 @@ const NotificationService = require('../services/notificationService');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'college_media_secret_key';
+const router = express.Router();
+const JWT_SECRET =
+  process.env.JWT_SECRET || "college_media_secret_key";
 
 // Apply general rate limiter to all message routes
 router.use(apiLimiter);
 
 // Middleware to verify JWT token
 const verifyToken = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1]; // Bearer TOKEN
+  const token = req.headers.authorization?.split(" ")[1];
 
   if (!token) {
     return res.status(401).json({
       success: false,
-      data: null,
-      message: 'Access denied. No token provided.'
+      message: "Access denied. No token provided.",
     });
   }
 
@@ -42,11 +43,10 @@ const verifyToken = (req, res, next) => {
     const decoded = jwt.verify(token, JWT_SECRET);
     req.userId = decoded.userId;
     next();
-  } catch (error) {
-    res.status(400).json({
+  } catch {
+    return res.status(400).json({
       success: false,
-      data: null,
-      message: 'Invalid token.'
+      message: "Invalid token.",
     });
   }
 };
@@ -115,48 +115,59 @@ router.post('/', verifyToken, validateMessage, checkValidation, invalidateCache(
     const dbConnection = req.app.get('dbConnection');
     const useMongoDB = dbConnection?.useMongoDB;
 
-    // Check if receiver exists
-    let receiverUser;
-    if (useMongoDB) {
-      receiverUser = await UserMongo.findById(receiver);
-    } else {
-      receiverUser = await UserMock.findById(receiver);
-    }
+      if (receiver === req.userId) {
+        return res.status(400).json({
+          success: false,
+          message: "Cannot send message to yourself",
+        });
+      }
 
-    if (!receiverUser) {
-      return res.status(404).json({
-        success: false,
-        data: null,
-        message: 'Receiver not found'
-      });
-    }
+      const messageData = {
+        sender: req.userId,
+        receiver,
+        content,
+        messageType: messageType || "text",
+        attachmentUrl: attachmentUrl || null,
+      };
 
-    // Prevent sending message to yourself
-    if (receiver === req.userId) {
-      return res.status(400).json({
-        success: false,
-        data: null,
-        message: 'Cannot send message to yourself'
-      });
-    }
+      let message;
 
-    const messageData = {
-      sender: req.userId,
-      receiver,
-      content,
-      messageType: messageType || 'text',
-      attachmentUrl: attachmentUrl || null
-    };
+      if (useMongoDB) {
+        const conversationId =
+          MessageMongo.generateConversationId(
+            req.userId,
+            receiver
+          );
 
-    let message;
-    if (useMongoDB) {
-      const conversationId = MessageMongo.generateConversationId(req.userId, receiver);
-      message = await MessageMongo.create({ ...messageData, conversationId });
-      message = await message.populate('sender', 'username firstName lastName profilePicture');
-      message = await message.populate('receiver', 'username firstName lastName profilePicture');
-    } else {
-      message = await MessageMock.create(messageData);
-    }
+        message = await MessageMongo.create({
+          ...messageData,
+          conversationId,
+        });
+
+        message = await message.populate(
+          "sender receiver",
+          "username firstName lastName profilePicture"
+        );
+      } else {
+        message = await MessageMock.create(messageData);
+      }
+
+      /* --------------------------------------------------
+         🔌 DEPENDENCY CALL (Notification Service)
+         - Failure will NOT break main flow
+      -------------------------------------------------- */
+      const notificationResult = await req.callDependency(
+        {
+          method: "POST",
+          url: process.env.NOTIFICATION_SERVICE_URL || "https://example.com/notify",
+          data: {
+            userId: receiver,
+            type: "NEW_MESSAGE",
+            message: "You have received a new message",
+          },
+        },
+        { delivered: false } // ✅ fallback
+      );
 
     // Invalidate receiver's cache manually
     try {
@@ -208,7 +219,7 @@ router.post('/', verifyToken, validateMessage, checkValidation, invalidateCache(
       message: 'Error sending message'
     });
   }
-});
+);
 
 /**
  * @route   GET /api/messages/conversations
@@ -217,74 +228,35 @@ router.post('/', verifyToken, validateMessage, checkValidation, invalidateCache(
  */
 router.get('/conversations', verifyToken, cacheMiddleware({ prefix: 'user-conversations', ttl: 60 }), async (req, res) => {
   try {
-    const dbConnection = req.app.get('dbConnection');
-    const useMongoDB = dbConnection?.useMongoDB;
-
+    const useMongoDB = req.app.get("dbConnection")?.useMongoDB;
     let conversations = [];
 
     if (useMongoDB) {
-      // Get all messages where user is sender or receiver
       const messages = await MessageMongo.find({
         $or: [{ sender: req.userId }, { receiver: req.userId }],
-        deletedBy: { $nin: [req.userId] }
+        deletedBy: { $nin: [req.userId] },
       })
-        .populate('sender', 'username firstName lastName profilePicture')
-        .populate('receiver', 'username firstName lastName profilePicture')
+        .populate(
+          "sender receiver",
+          "username firstName lastName profilePicture"
+        )
         .sort({ createdAt: -1 });
 
-      // Group by conversation
-      const conversationMap = new Map();
+      const map = new Map();
 
-      messages.forEach(msg => {
-        const conversationId = msg.conversationId;
-
-        if (!conversationMap.has(conversationId)) {
-          const otherUser = msg.sender._id.toString() === req.userId
-            ? msg.receiver
-            : msg.sender;
-
-          conversationMap.set(conversationId, {
-            conversationId,
-            otherUser,
+      messages.forEach((msg) => {
+        if (!map.has(msg.conversationId)) {
+          map.set(msg.conversationId, {
+            conversationId: msg.conversationId,
             lastMessage: msg,
             unreadCount: 0,
-            messages: []
           });
         }
-
-        const conv = conversationMap.get(conversationId);
-        conv.messages.push(msg);
-
-        // Count unread messages
-        if (msg.receiver._id.toString() === req.userId && !msg.isRead) {
-          conv.unreadCount++;
-        }
-      });
-
-      conversations = Array.from(conversationMap.values());
-    } else {
-      // Mock database implementation
-      const messages = await MessageMock.find({});
-      const userMessages = messages.filter(msg =>
-        (msg.sender === req.userId || msg.receiver === req.userId) &&
-        !msg.deletedBy.includes(req.userId)
-      );
-
-      const conversationMap = new Map();
-
-      userMessages.forEach(msg => {
-        const conversationId = msg.conversationId;
-
-        if (!conversationMap.has(conversationId)) {
-          const otherUserId = msg.sender === req.userId ? msg.receiver : msg.sender;
-
-          conversationMap.set(conversationId, {
-            conversationId,
-            otherUserId,
-            lastMessage: msg,
-            unreadCount: 0,
-            messages: []
-          });
+        if (
+          msg.receiver._id.toString() === req.userId &&
+          !msg.isRead
+        ) {
+          map.get(msg.conversationId).unreadCount++;
         }
 
         const conv = conversationMap.get(conversationId);
@@ -446,16 +418,13 @@ router.put('/:messageId/read', verifyToken, validateMessageId, checkValidation, 
 
     res.json({
       success: true,
-      data: message,
-      message: 'Message marked as read'
+      data: conversations,
+      payload: conversations,
+      meta: { apiVersion: req.apiVersion },
+      message: "Conversations retrieved successfully",
     });
-  } catch (error) {
-    logger.error('Mark message as read error:', error);
-    res.status(500).json({
-      success: false,
-      data: null,
-      message: 'Error marking message as read'
-    });
+  } catch (err) {
+    next(err);
   }
 });
 
@@ -651,16 +620,13 @@ router.put('/conversation/:userId/read-all', verifyToken, invalidateCache(['user
 
     res.json({
       success: true,
-      data: null,
-      message: 'All messages marked as read'
+      data: { unreadCount },
+      payload: { unreadCount },
+      meta: { apiVersion: req.apiVersion },
+      message: "Unread count retrieved successfully",
     });
-  } catch (error) {
-    logger.error('Mark all as read error:', error);
-    res.status(500).json({
-      success: false,
-      data: null,
-      message: 'Error marking messages as read'
-    });
+  } catch (err) {
+    next(err);
   }
 });
 

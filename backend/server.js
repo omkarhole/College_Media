@@ -15,12 +15,60 @@ const { setupSwagger } = require('./config/swagger');
 const passport = require('./config/passport');
 require('./utils/redisClient'); // Initialize Redis client
 
+/* ============================================================
+   📦 CORE DEPENDENCIES
+============================================================ */
+const express = require("express");
+const cors = require("cors");
+const dotenv = require("dotenv");
+const path = require("path");
+const http = require("http");
+const os = require("os");
+
+/* ============================================================
+   🔧 INTERNAL IMPORTS
+const helmet = require("helmet");
+const securityHeaders = require("./config/securityHeaders");
+
+
+const { initDB } = require("./config/db");
+const { notFound, errorHandler } = require("./middleware/errorMiddleware");
+
+const resumeRoutes = require("./routes/resume");
+const uploadRoutes = require("./routes/upload");
+
+const {
+  globalLimiter,
+  authLimiter,
+  otpLimiter,
+  searchLimiter,
+  adminLimiter,
+} = require("./middleware/rateLimiter");
+
+const { slidingWindowLimiter } = require("./middleware/slidingWindowLimiter");
+const { warmUpCache } = require("./utils/cache");
+const logger = require("./utils/logger");
+
+/* ============================================================
+   📊 OBSERVABILITY & METRICS
+============================================================ */
+const metricsMiddleware = require("./middleware/metrics.middleware");
+const { client: metricsClient } = require("./utils/metrics");
+
+/* ============================================================
+   🔁 BACKGROUND JOBS
+const sampleJob = require("./jobs/sampleJob");
+
+/* ============================================================
+   🌱 ENVIRONMENT SETUP
 dotenv.config();
 
 
 const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 5000;
+const METRICS_TOKEN = process.env.METRICS_TOKEN || "metrics-secret";
+const TRUST_PROXY = process.env.TRUST_PROXY === "true";
 
 // Middleware
 app.use(helmet()); // Set security headers
@@ -45,24 +93,118 @@ if (process.env.NODE_ENV !== 'test') {
   app.use(globalLimiter);
 }
 
-// Apply input sanitization (XSS & NoSQL injection protection)
-app.use(sanitizeAll);
+app.disable("x-powered-by");
 
-// Validate Content-Type for POST/PUT/PATCH requests
-app.use(validateContentType);
+/* ============================================================
+   🔐 SECURITY HEADERS (HELMET)
+app.use(helmet(securityHeaders(ENV)));
 
-// Prevent parameter pollution
-app.use(preventParameterPollution(['tags', 'categories'])); // Allow arrays for specific params
+/* ============================================================
+   🌍 CORS CONFIG
+============================================================ */
+app.use(
+  cors({
+    origin: true,
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-API-Version",
+      "X-Metrics-Token",
+    ],
+  })
+);
 
-// Static file serving for uploaded images
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+/* ============================================================
+   📦 BODY PARSERS
+============================================================ */
+app.use(express.json({ limit: "2mb" }));
+app.use(express.urlencoded({ extended: true, limit: "2mb" }));
 
-// Basic route
-app.get('/', (req, res) => {
+/* ============================================================
+   📊 REQUEST METRICS
+app.use(metricsMiddleware);
+
+/* ============================================================
+   ⏱️ REQUEST TIMEOUT GUARD
+============================================================ */
+app.use((req, res, next) => {
+  req.setTimeout(10 * 60 * 1000);
+  res.setTimeout(10 * 60 * 1000);
+  next();
+});
+
+/* ============================================================
+   🐢 SLOW REQUEST LOGGER
+============================================================ */
+app.use((req, res, next) => {
+  const start = Date.now();
+
+  res.on("finish", () => {
+    const duration = Date.now() - start;
+    if (duration > 5000) {
+      logger.warn("Slow request detected", {
+        method: req.method,
+        url: req.originalUrl,
+        durationMs: duration,
+        status: res.statusCode,
+      });
+    }
+  });
+
+  next();
+});
+
+/* ============================================================
+   🔁 API VERSIONING
+============================================================ */
+app.use((req, res, next) => {
+  req.apiVersion = req.headers["x-api-version"] || "v1";
+  res.setHeader("X-API-Version", req.apiVersion);
+  next();
+});
+
+/* ============================================================
+   ⏱️ RATE LIMITING (ISSUE #500 FIX)
+============================================================ */
+
+/**
+ * Sliding window limiter – light protection
+ */
+app.use("/api", slidingWindowLimiter);
+
+/**
+ * Global limiter – protects all APIs
+ */
+if (ENV === "production") {
+  app.use("/api", globalLimiter);
+}
+
+/* ============================================================
+   📁 STATIC FILES
+============================================================ */
+app.use(
+  "/uploads",
+  express.static(path.join(__dirname, "uploads"), {
+    maxAge: "1h",
+    etag: true,
+    immutable: false,
+  })
+);
+
+/* ============================================================
+   ❤️ HEALTH CHECK
+============================================================ */
+app.get("/", (req, res) => {
   res.json({
     success: true,
-    data: null,
-    message: 'College Media API is running!'
+    message: "College Media API running",
+    env: ENV,
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    cpu: os.loadavg(),
+    timestamp: new Date().toISOString(),
   });
 });
 
@@ -70,20 +212,13 @@ app.get('/', (req, res) => {
 setupSwagger(app);
 
 // Import and register routes
-const { versionMiddleware } = require('./middleware/versionMiddleware');
-
-// Mount v1 routes
-app.use('/api/v1', require('./routes/v1'));
-
-// Mount v2 routes
-app.use('/api/v2', require('./routes/v2'));
-
-// Legacy routes (aliased to v1, marked as deprecated)
-app.use('/api', versionMiddleware({
-  deprecation: true,
-  sunset: '2026-12-31T23:59:59Z',
-  link: 'https://github.com/SatyamPandey-07/College_Media/wiki/API-Deprecation'
-}), require('./routes/v1'));
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/users', require('./routes/users'));
+app.use('/api/posts', require('./routes/posts'));
+app.use('/api/messages', require('./routes/messages'));
+app.use('/api/account', require('./routes/account'));
+app.use('/api/search', require('./routes/search'));
+app.use('/api/moderation', require('./routes/moderation'));
 
 // Admin routes (not versioned)
 app.use('/api/admin', require('./routes/admin'));
@@ -91,29 +226,90 @@ app.use('/api/admin', require('./routes/admin'));
 // 404 Not Found Handler (must be after all routes)
 app.use(notFound);
 
-// Global Error Handler (must be last)
-app.use(errorHandler);
-
-// Initialize database connection
-const connectDB = async () => {
-  let dbConnection;
-  try {
-    // Check if we are in test environment and using memory server
-    // In test env, db connection might be handled by test setup, OR we can init it here
-    // simpler to let test setup handle connection if it uses memory-server
-    if (process.env.NODE_ENV === 'test') {
-      return;
-    }
-
-    dbConnection = await initDB();
-    app.set('dbConnection', dbConnection);
-    logger.info('Database initialized successfully');
-  } catch (error) {
-    logger.error('Database initialization error:', error);
-    dbConnection = { useMongoDB: false, mongoose: null };
-    app.set('dbConnection', dbConnection);
-    logger.warn('Using file-based database as fallback');
+  if (ENV === "production" && token !== METRICS_TOKEN) {
+    logger.warn("Unauthorized metrics access", {
+      ip: req.ip,
+    });
+    return res.status(403).json({
+      success: false,
+      message: "Forbidden",
+    });
   }
+
+  try {
+    res.set("Content-Type", metricsClient.register.contentType);
+    res.end(await metricsClient.register.metrics());
+  } catch (err) {
+    logger.error("Metrics endpoint failed", {
+      error: err.message,
+    });
+    res.status(500).json({
+      success: false,
+      message: "Failed to load metrics",
+    });
+  }
+});
+
+/* ============================================================
+   🔁 BACKGROUND JOB BOOTSTRAP
+const startBackgroundJobs = () => {
+  logger.info("Bootstrapping background jobs");
+
+  setImmediate(async () => {
+    try {
+      await sampleJob.run({ shouldFail: false });
+      logger.info("Background job completed successfully");
+    } catch (err) {
+      logger.error("Background job failed", {
+        job: "sample_background_job",
+        error: err.message,
+        stack: err.stack,
+      });
+    }
+  });
+};
+
+/* ============================================================
+   🚀 START SERVER
+============================================================ */
+let dbConnection = null;
+
+const startServer = async () => {
+  logger.info("Starting server bootstrap");
+
+  /* ---------- DB CONNECTION ---------- */
+  try {
+    dbConnection = await initDB();
+    logger.info("Database connected successfully");
+  } catch (err) {
+    logger.critical("Database connection failed", {
+      error: err.message,
+    });
+    process.exit(1);
+  }
+
+  // ------------------
+  // 🔐 ROUTES
+  // ------------------
+  app.use("/api/auth", authLimiter, require("./routes/auth"));
+  app.use("/api/users", require("./routes/users"));
+  app.use("/api/resume", resumeRoutes);
+  app.use("/api/upload", uploadRoutes);
+  app.use("/api/messages", require("./routes/messages"));
+  app.use("/api/account", require("./routes/account"));
+  app.use("/api/notifications", require("./routes/notifications"));
+  app.use("/api/alumni", require("./routes/alumni"));
+  app.use("/api/posts", require("./routes/posts"));
+
+  // ------------------
+  // ❌ ERROR HANDLERS (VERY IMPORTANT ORDER)
+  // ------------------
+  app.use(notFound);      // 404 handler
+  app.use(errorHandler); // global error handler
+
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+  });
 };
 
 // Start server only if run directly
@@ -133,4 +329,5 @@ if (require.main === module) {
   });
 }
 
-module.exports = app;
+/* ============================================================
+   ▶️ BOOTSTRAP

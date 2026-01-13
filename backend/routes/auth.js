@@ -15,9 +15,9 @@ const { logActivity, logLoginAttempt } = require('../middleware/activityLogger')
 const passport = require('../config/passport');
 const router = express.Router();
 
-const JWT_SECRET = process.env.JWT_SECRET || 'college_media_secret_key';
+const JWT_SECRET = process.env.JWT_SECRET || "college_media_secret_key";
 
-// In-memory OTP storage (use Redis in production)
+// ⚠️ In-memory OTP store
 const otpStore = new Map();
 
 // Middleware to verify JWT token
@@ -73,6 +73,11 @@ const verifyToken = (req, res, next) => {
  */
 router.post('/register', registerLimiter, validateRegister, checkValidation, async (req, res, next) => {
   try {
+    console.log('\ud83d\udce5 Registration request received:', { 
+      ...req.body, 
+      password: req.body.password ? '***' : undefined 
+    });
+    
     const { username, email, password, firstName, lastName } = req.body;
 
     // Additional validation using custom validators
@@ -134,50 +139,22 @@ router.post('/register', registerLimiter, validateRegister, checkValidation, asy
         });
       }
 
-      // Hash the password
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(password, salt);
+    const existingUser = dbConnection?.useMongoDB
+      ? await UserMongo.findOne({ $or: [{ email }, { username }] })
+      : await UserMock.findByEmail(email);
 
-      // Create new user
-      const newUser = new UserMongo({
-        username,
-        email,
-        password: hashedPassword,
-        firstName,
-        lastName
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: "User with this email or username already exists",
       });
+    }
 
-      await newUser.save();
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-      // Generate JWT token
-      const token = jwt.sign(
-        { userId: newUser._id },
-        JWT_SECRET,
-        { expiresIn: '7d' }
-      );
-
-      res.status(201).json({
-        success: true,
-        data: {
-          id: newUser._id,
-          username: newUser.username,
-          email: newUser.email,
-          firstName: newUser.firstName,
-          lastName: newUser.lastName,
-          token
-        },
-        message: 'User registered successfully'
-      });
-    } else {
-      // Use mock database
-      try {
-        const newUser = await UserMock.create({
-          username,
-          email,
-          password, // password will be hashed in the create function
-          firstName,
-          lastName
-        });
+    const newUser = dbConnection?.useMongoDB
+      ? await UserMongo.create({ username, email, password: hashedPassword, firstName, lastName })
+      : await UserMock.create({ username, email, password: hashedPassword, firstName, lastName });
 
         // Generate JWT token
         const token = jwt.sign(
@@ -280,12 +257,19 @@ router.post('/login', authLimiter, validateLogin, checkValidation, async (req, r
         });
       }
 
-      // Generate JWT token
-      const token = jwt.sign(
-        { userId: user._id },
-        JWT_SECRET,
-        { expiresIn: '7d' }
-      );
+      // Check if 2FA is enabled
+      if (user.twoFactorEnabled) {
+        // Return a special response indicating 2FA is required
+        return res.json({
+          success: true,
+          requiresTwoFactor: true,
+          userId: user._id,
+          message: "Two-factor authentication required",
+        });
+      }
+
+      // 🔐 CREATE NEW SESSION (only if 2FA not required or already verified)
+      const sessionId = crypto.randomUUID();
 
       // Log successful login
       logLoginAttempt(req, user._id, true, { method: 'password' }).catch(err => logger.error('Login log failed:', err));
@@ -327,31 +311,27 @@ router.post('/login', authLimiter, validateLogin, checkValidation, async (req, r
 
       // Generate JWT token
       const token = jwt.sign(
-        { userId: user._id },
+        {
+          userId: user._id,
+          sessionId,
+        },
         JWT_SECRET,
-        { expiresIn: '7d' }
+        { expiresIn: "7d" }
       );
 
       res.json({
         success: true,
-        data: {
-          id: user._id,
-          username: user.username,
-          email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          profilePicture: user.profilePicture,
-          bio: user.bio,
-          token
-        },
-        message: 'Login successful'
+        data: { token },
+        message: "Login successful",
       });
+    } catch (err) {
+      next(err);
     }
   } catch (error) {
     logger.error('Login error:', error);
     next(error); // Pass to error handler
   }
-});
+);
 
 /**
  * @swagger
@@ -466,16 +446,14 @@ router.post('/forgot-password', forgotPasswordLimiter, async (req, res, next) =>
       user = await UserMock.findByEmail(email);
     }
 
-    // Always return success to prevent user enumeration
     if (user) {
-      // Generate 6-digit OTP
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
       // Store OTP with expiration (10 minutes)
       otpStore.set(email, {
         otp,
-        expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
-        userId: user._id || user.id
+        userId: user._id || user.id,
+        expiresAt: Date.now() + 10 * 60 * 1000,
       });
 
       // Try to send email if API key is configured
@@ -495,8 +473,7 @@ router.post('/forgot-password', forgotPasswordLimiter, async (req, res, next) =>
 
     res.json({
       success: true,
-      data: null,
-      message: 'If an account exists with this email, an OTP has been sent.'
+      message: "If an account exists, an OTP has been sent.",
     });
   } catch (error) {
     logger.error('Forgot password error:', error);
@@ -564,11 +541,10 @@ router.post('/verify-otp', authLimiter, async (req, res, next) => {
       });
     }
 
-    // OTP is valid - generate a temporary token for password reset
     const resetToken = jwt.sign(
-      { userId: storedData.userId, email },
+      { userId: data.userId },
       JWT_SECRET,
-      { expiresIn: '15m' } // 15 minutes to complete password reset
+      { expiresIn: "15m" }
     );
 
     // Don't delete OTP yet - will delete after password reset
@@ -576,7 +552,7 @@ router.post('/verify-otp', authLimiter, async (req, res, next) => {
     res.json({
       success: true,
       data: { resetToken },
-      message: 'OTP verified successfully'
+      message: "OTP verified successfully",
     });
   } catch (error) {
     logger.error('Verify OTP error:', error);
@@ -609,9 +585,8 @@ router.post('/reset-password', authLimiter, async (req, res, next) => {
       });
     }
 
-    // Hash new password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(newPassword, salt);
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    const dbConnection = req.app.get("dbConnection");
 
     // Get database connection from app
     const dbConnection = req.app.get('dbConnection');
@@ -938,13 +913,352 @@ router.get('/2fa/status', verifyToken, async (req, res, next) => {
 
     res.json({
       success: true,
-      data: {
-        enabled: user.twoFactorEnabled || false
-      },
-      message: '2FA status retrieved'
+      message: "Password reset successful. All sessions revoked.",
     });
   } catch (error) {
     logger.error('Get 2FA status error:', error);
+    next(error);
+  }
+});
+
+/* ---------------- TWO-FACTOR AUTHENTICATION ---------------- */
+
+// Middleware to verify JWT token
+const verifyToken = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+
+  if (!token) {
+    return res.status(401).json({
+      success: false,
+      message: 'Access denied. No token provided.'
+    });
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.userId = decoded.userId || decoded.id;
+    next();
+  } catch (error) {
+    return res.status(401).json({
+      success: false,
+      message: 'Invalid or expired token.'
+    });
+  }
+};
+
+/**
+ * POST /api/auth/2fa/enable
+ * Generate TOTP secret and QR code for 2FA setup
+ */
+router.post('/2fa/enable', verifyToken, async (req, res, next) => {
+  try {
+    const dbConnection = req.app.get('dbConnection');
+    
+    // Find user
+    let user;
+    if (dbConnection && dbConnection.useMongoDB) {
+      user = await UserMongo.findById(req.userId);
+    } else {
+      user = UserMock.findById(req.userId);
+    }
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Check if 2FA is already enabled
+    if (user.twoFactorEnabled) {
+      return res.status(400).json({
+        success: false,
+        message: 'Two-factor authentication is already enabled'
+      });
+    }
+
+    // Generate TOTP secret
+    const secret = speakeasy.generateSecret({
+      name: `College Media (${user.email})`,
+      issuer: 'College Media',
+      length: 32
+    });
+
+    // Generate QR code as base64 data URL
+    const qrCodeUrl = await QRCode.toDataURL(secret.otpauth_url);
+
+    // Return secret and QR code to frontend (don't save yet, wait for verification)
+    res.json({
+      success: true,
+      data: {
+        secret: secret.base32,
+        qrCode: qrCodeUrl
+      },
+      message: '2FA setup initialized. Scan QR code with your authenticator app.'
+    });
+  } catch (error) {
+    console.error('Enable 2FA error:', error);
+    next(error);
+  }
+});
+
+/**
+ * POST /api/auth/2fa/verify
+ * Verify TOTP code and enable 2FA for user
+ */
+router.post('/2fa/verify', verifyToken, async (req, res, next) => {
+  try {
+    const { secret, token } = req.body;
+
+    // Validate input
+    if (!secret || !token) {
+      return res.status(400).json({
+        success: false,
+        message: 'Secret and token are required'
+      });
+    }
+
+    // Verify TOTP code
+    const verified = speakeasy.totp.verify({
+      secret: secret,
+      encoding: 'base32',
+      token: token,
+      window: 2 // Allow ±2 time steps (60 seconds tolerance)
+    });
+
+    if (!verified) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid verification code. Please try again.'
+      });
+    }
+
+    // Save secret and enable 2FA
+    const dbConnection = req.app.get('dbConnection');
+    
+    if (dbConnection && dbConnection.useMongoDB) {
+      await UserMongo.findByIdAndUpdate(req.userId, {
+        twoFactorEnabled: true,
+        twoFactorSecret: secret
+      });
+    } else {
+      const user = UserMock.findById(req.userId);
+      if (user) {
+        UserMock.update(req.userId, {
+          twoFactorEnabled: true,
+          twoFactorSecret: secret
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Two-factor authentication enabled successfully'
+    });
+  } catch (error) {
+    console.error('Verify 2FA error:', error);
+    next(error);
+  }
+});
+
+/**
+ * POST /api/auth/2fa/disable
+ * Disable 2FA for user account
+ */
+router.post('/2fa/disable', verifyToken, async (req, res, next) => {
+  try {
+    const { password } = req.body;
+
+    // Validate input
+    if (!password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password is required to disable 2FA'
+      });
+    }
+
+    const dbConnection = req.app.get('dbConnection');
+    
+    // Find user with password field
+    let user;
+    if (dbConnection && dbConnection.useMongoDB) {
+      user = await UserMongo.findById(req.userId).select('+password');
+    } else {
+      user = UserMock.findById(req.userId);
+    }
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Verify password
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid password'
+      });
+    }
+
+    // Check if 2FA is enabled
+    if (!user.twoFactorEnabled) {
+      return res.status(400).json({
+        success: false,
+        message: 'Two-factor authentication is not enabled'
+      });
+    }
+
+    // Disable 2FA and remove secret
+    if (dbConnection && dbConnection.useMongoDB) {
+      await UserMongo.findByIdAndUpdate(req.userId, {
+        twoFactorEnabled: false,
+        twoFactorSecret: null
+      });
+    } else {
+      UserMock.update(req.userId, {
+        twoFactorEnabled: false,
+        twoFactorSecret: null
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Two-factor authentication disabled successfully'
+    });
+  } catch (error) {
+    console.error('Disable 2FA error:', error);
+    next(error);
+  }
+});
+
+/**
+ * GET /api/auth/2fa/status
+ * Get current 2FA status for the user
+ */
+router.get('/2fa/status', verifyToken, async (req, res, next) => {
+  try {
+    const dbConnection = req.app.get('dbConnection');
+    
+    // Find user
+    let user;
+    if (dbConnection && dbConnection.useMongoDB) {
+      user = await UserMongo.findById(req.userId).select('twoFactorEnabled');
+    } else {
+      user = UserMock.findById(req.userId);
+    }
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        twoFactorEnabled: user.twoFactorEnabled || false
+      },
+      message: '2FA status retrieved successfully'
+    });
+  } catch (error) {
+    console.error('Get 2FA status error:', error);
+    next(error);
+  }
+});
+
+/**
+ * POST /api/auth/2fa/verify-login
+ * Verify 2FA code during login
+ */
+router.post('/2fa/verify-login', async (req, res, next) => {
+  try {
+    const { userId, token } = req.body;
+
+    // Validate input
+    if (!userId || !token) {
+      return res.status(400).json({
+        success: false,
+        message: 'User ID and token are required'
+      });
+    }
+
+    const dbConnection = req.app.get('dbConnection');
+    
+    // Find user
+    let user;
+    if (dbConnection && dbConnection.useMongoDB) {
+      user = await UserMongo.findById(userId);
+    } else {
+      user = UserMock.findById(userId);
+    }
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    if (!user.twoFactorEnabled || !user.twoFactorSecret) {
+      return res.status(400).json({
+        success: false,
+        message: '2FA is not enabled for this account'
+      });
+    }
+
+    // Verify TOTP code
+    const verified = speakeasy.totp.verify({
+      secret: user.twoFactorSecret,
+      encoding: 'base32',
+      token: token,
+      window: 2
+    });
+
+    if (!verified) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid verification code'
+      });
+    }
+
+    // 🔐 CREATE NEW SESSION
+    const sessionId = crypto.randomUUID();
+
+    await Session.create({
+      userId: user._id,
+      sessionId,
+      ipAddress: req.ip,
+      userAgent: req.headers["user-agent"],
+      isActive: true,
+    });
+
+    // 🔑 JWT BOUND TO SESSION
+    const jwtToken = jwt.sign(
+      { userId: user._id, sessionId },
+      JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    res.json({
+      success: true,
+      data: {
+        token: jwtToken,
+        user: {
+          id: user._id,
+          username: user.username,
+          email: user.email,
+          role: user.role
+        }
+      },
+      message: '2FA verification successful'
+    });
+  } catch (error) {
+    console.error('Verify login 2FA error:', error);
     next(error);
   }
 });

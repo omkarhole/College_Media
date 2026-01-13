@@ -1,7 +1,10 @@
-const express = require('express');
-const UserMongo = require('../models/User');
-const UserMock = require('../mockdb/userDB');
-const { validateProfileUpdate, checkValidation } = require('../middleware/validationMiddleware');
+const express = require("express");
+const UserMongo = require("../models/User");
+const UserMock = require("../mockdb/userDB");
+const {
+  validateProfileUpdate,
+  checkValidation,
+} = require("../middleware/validationMiddleware");
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const logger = require('../utils/logger');
@@ -17,30 +20,39 @@ const { deleteImage, getPublicIdFromUrl, isCloudinaryConfigured } = require('../
 
 const JWT_SECRET = process.env.JWT_SECRET || 'college_media_secret_key';
 
-// Apply general rate limiter to all user routes
-router.use(apiLimiter);
-
-// Middleware to verify JWT token
+/* ------------------
+   🔐 AUTH MIDDLEWARE
+------------------ */
 const verifyToken = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1]; // Bearer TOKEN
+  const token = req.headers.authorization?.split(" ")[1];
 
   if (!token) {
     return res.status(401).json({
       success: false,
-      data: null,
-      message: 'Access denied. No token provided.'
+      message: "Access denied. No token provided.",
     });
   }
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     req.userId = decoded.userId;
+const authorizeSelfOrAdmin = (paramKey = "userId") => {
+  return (req, res, next) => {
+    const targetId = req.params[paramKey];
+
+    // Admin override
+    if (req.currentUser.role === "admin") return next();
+
+    // Owner-only access
+    if (targetId !== req.userId) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden: You are not authorized to access this resource",
     next();
   } catch (error) {
-    res.status(400).json({
+    return res.status(401).json({
       success: false,
-      data: null,
-      message: 'Invalid token.'
+      message: "Invalid token.",
     });
   }
 };
@@ -225,13 +237,8 @@ router.post('/profile-picture', verifyToken, uploadProfilePicture.single('profil
         { new: true, runValidators: true }
       ).select('-password');
 
-      if (!updatedUser) {
-        return res.status(404).json({
-          success: false,
-          data: null,
-          message: 'User not found'
-        });
-      }
+/* =====================================================
+   👤 GET CURRENT USER PROFILE
 
       // Delete old image from Cloudinary (if it was a Cloudinary URL)
       if (oldPictureUrl && isCloudinaryConfigured()) {
@@ -254,6 +261,10 @@ router.post('/profile-picture', verifyToken, uploadProfilePicture.single('profil
         req.userId,
         profilePictureUrl
       );
+      if (!user)
+        return res
+          .status(404)
+          .json({ success: false, message: "User not found" });
 
       if (!updatedUser) {
         return res.status(404).json({
@@ -303,33 +314,8 @@ router.get('/profile/:username', verifyToken, cacheMiddleware({
       res.json({
         success: true,
         data: user,
-        message: 'Profile retrieved successfully'
-      });
-    } else {
-      // Use mock database
-      const user = await UserMock.findByUsername(username);
-      if (!user) {
-        return res.status(404).json({
-          success: false,
-          data: null,
-          message: 'User not found'
-        });
-      }
-
-      // Remove sensitive fields
-      const { password, email, ...publicProfile } = user;
-
-      res.json({
-        success: true,
-        data: publicProfile,
-        message: 'Profile retrieved successfully'
       });
     }
-  } catch (error) {
-    logger.error('Get user profile error:', error);
-    next(error);
-  }
-});
 
 // Get user's posts
 router.get('/profile/:username/posts', verifyToken, cacheMiddleware({
@@ -420,147 +406,75 @@ router.put('/profile/settings', verifyToken, invalidateCache(['user-profile::use
         });
       }
 
-      res.json({
-        success: true,
-        data: updatedUser,
-        message: 'Settings updated successfully'
+      const updatedUser = await UserMock.update(req.userId, {
+        firstName,
+        lastName,
+        bio,
       });
-    } else {
-      // Use mock database
-      const updatedUser = await UserMock.update(req.userId, updateData);
-
-      if (!updatedUser) {
-        return res.status(404).json({
-          success: false,
-          data: null,
-          message: 'User not found'
-        });
-      }
 
       res.json({
         success: true,
         data: updatedUser,
-        message: 'Settings updated successfully'
+        message: "Profile updated successfully",
       });
+    } catch (err) {
+      next(err); // 409 conflict handled globally
     }
-  } catch (error) {
-    logger.error('Update settings error:', error);
-    next(error);
   }
-});
+);
 
 // Get profile stats (followers, following, posts count)
 router.get('/profile/stats', verifyToken, cacheMiddleware({ prefix: 'user-stats', ttl: 300 }), async (req, res, next) => {
   try {
-    // Get database connection from app
-    const dbConnection = req.app.get('dbConnection');
+    const { email, isPrivate, notificationSettings } = req.body;
+    const db = req.app.get("dbConnection");
 
-    if (dbConnection && dbConnection.useMongoDB) {
-      // Use MongoDB
+    if (db?.useMongoDB) {
       const user = await UserMongo.findById(req.userId);
-      if (!user) {
-        return res.status(404).json({
-          success: false,
-          data: null,
-          message: 'User not found'
-        });
-      }
+      if (!user)
+        return res
+          .status(404)
+          .json({ success: false, message: "User not found" });
 
-      // TODO: Implement actual counts from relationships and posts
-      const stats = {
-        posts: 0,
-        followers: user.followers?.length || 0,
-        following: user.following?.length || 0
-      };
+      if (email) user.email = email;
+      if (typeof isPrivate !== "undefined")
+        user.isPrivate = isPrivate;
+      if (notificationSettings)
+        user.notificationSettings = notificationSettings;
 
-      res.json({
+      const updatedUser = await user.safeSave();
+
+      return res.json({
         success: true,
-        data: stats,
-        message: 'Stats retrieved successfully'
+        data: updatedUser,
+        message: "Settings updated successfully",
       });
-    } else {
-      // Use mock database
-      const mockStats = {
-        posts: 6,
-        followers: 1247,
-        following: 543
-      };
-
-      res.json({
-        success: true,
-        data: mockStats,
-        message: 'Stats retrieved successfully'
-      });
+    } catch (err) {
+      next(err);
     }
-  } catch (error) {
-    logger.error('Get stats error:', error);
-    next(error);
-  }
-});
-
-// Follow/Unfollow user
-router.post('/profile/:username/follow', verifyToken, async (req, res, next) => {
+router.put("/profile/settings", verifyToken, async (req, res, next) => {
   try {
-    const { username } = req.params;
+    const { email, isPrivate, notificationSettings } = req.body;
 
-    // Get database connection from app
-    const dbConnection = req.app.get('dbConnection');
+    if (email) req.currentUser.email = email;
+    if (typeof isPrivate !== "undefined")
+      req.currentUser.isPrivate = isPrivate;
+    if (notificationSettings)
+      req.currentUser.notificationSettings = notificationSettings;
 
-    if (dbConnection && dbConnection.useMongoDB) {
-      // Use MongoDB
-      const targetUser = await UserMongo.findOne({ username });
-      if (!targetUser) {
-        return res.status(404).json({
-          success: false,
-          data: null,
-          message: 'User not found'
-        });
-      }
+    const updatedUser =
+      typeof req.currentUser.safeSave === "function"
+        ? await req.currentUser.safeSave()
+        : await UserMock.update(req.userId, req.body);
 
-      // Check if already following
-      const currentUser = await UserMongo.findById(req.userId);
-      const isFollowing = currentUser.following?.includes(targetUser._id);
-
-      if (isFollowing) {
-        // Unfollow
-        await UserMongo.findByIdAndUpdate(req.userId, {
-          $pull: { following: targetUser._id }
-        });
-        await UserMongo.findByIdAndUpdate(targetUser._id, {
-          $pull: { followers: req.userId }
-        });
-
-        res.json({
-          success: true,
-          data: { isFollowing: false },
-          message: 'Unfollowed successfully'
-        });
-      } else {
-        // Follow
-        await UserMongo.findByIdAndUpdate(req.userId, {
-          $addToSet: { following: targetUser._id }
-        });
-        await UserMongo.findByIdAndUpdate(targetUser._id, {
-          $addToSet: { followers: req.userId }
-        });
-
-        res.json({
-          success: true,
-          data: { isFollowing: true },
-          message: 'Followed successfully'
-        });
-      }
-    } else {
-      // Use mock database
-      res.json({
-        success: true,
-        data: { isFollowing: true },
-        message: 'Follow action completed'
-      });
-    }
-  } catch (error) {
-    logger.error('Follow/Unfollow error:', error);
-    next(error);
+    const updatedUser = await UserMock.update(req.userId, req.body);
+    res.json({
+      success: true,
+      data: updatedUser,
+      message: "Settings updated successfully",
+    });
+  } catch (err) {
+    next(err);
   }
 });
 
@@ -570,40 +484,25 @@ router.delete('/profile-picture', verifyToken, invalidateCache(['user-profile::u
     // Get database connection from app
     const dbConnection = req.app.get('dbConnection');
 
-    if (dbConnection && dbConnection.useMongoDB) {
-      // Use MongoDB
-      const updatedUser = await UserMongo.findByIdAndUpdate(
-        req.userId,
-        { $unset: { profilePicture: "" } },
-        { new: true }
-      ).select('-password');
+        // 🔥 BOTH VERSION CHECKED
+        await currentUser.safeSave();
+        await targetUser.safeSave();
 
-      if (!updatedUser) {
-        return res.status(404).json({
-          success: false,
-          data: null,
-          message: 'User not found'
+        return res.json({
+          success: true,
+          data: { isFollowing: !isFollowing },
+          message: isFollowing ? "Unfollowed" : "Followed",
         });
       }
 
       res.json({
         success: true,
-        data: null,
-        message: 'Profile picture removed successfully'
+        data: { isFollowing: true },
+        message: "Follow action completed",
       });
-    } else {
-      // Use mock database
-      const updatedUser = await UserMock.updateProfilePicture(req.userId, null);
-
-      res.json({
-        success: true,
-        data: null,
-        message: 'Profile picture removed successfully'
-      });
+    } catch (err) {
+      next(err);
     }
-  } catch (error) {
-    logger.error('Delete profile picture error:', error);
-    next(error);
   }
 });
 
