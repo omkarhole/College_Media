@@ -17,6 +17,7 @@ const SearchBar = ({ className = '' }) => {
   const [suggestions, setSuggestions] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
   // Optimized: Increased debounce delay slightly to 400ms for better performance
   const debouncedQuery = useDebounce(query, 400);
   const searchRef = useRef(null);
