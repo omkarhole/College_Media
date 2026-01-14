@@ -433,6 +433,239 @@ Be specific and actionable in your suggestions.`;
       };
     }
   }
+
+  /**
+   * Optimize resume for specific job description
+   * @param {Object} resumeData - Complete resume data
+   * @param {String} jobDescription - Job description to optimize for
+   * @returns {Promise<Object>} Optimized resume with job-specific suggestions
+   */
+  async optimizeForJobDescription(resumeData, jobDescription) {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error('Mistral API key not configured. Please set MISTRAL_API_KEY in your environment variables.');
+    }
+
+    const { content, summary, personalInfo } = resumeData;
+
+    // Build resume text
+    let resumeText = '';
+    
+    if (personalInfo) {
+      resumeText += `PERSONAL INFORMATION:\n`;
+      resumeText += `${personalInfo.name || ''}\n`;
+      resumeText += `${personalInfo.email || ''} | ${personalInfo.phone || ''}\n`;
+      resumeText += `${personalInfo.linkedin || ''}\n\n`;
+    }
+
+    if (summary) {
+      resumeText += `PROFESSIONAL SUMMARY:\n${summary}\n\n`;
+    }
+
+    if (content.experience && content.experience.length > 0) {
+      resumeText += `EXPERIENCE:\n`;
+      content.experience.forEach(exp => {
+        resumeText += `${exp.title} at ${exp.company} (${exp.duration})\n`;
+        resumeText += `${exp.description}\n\n`;
+      });
+    }
+
+    if (content.education && content.education.length > 0) {
+      resumeText += `EDUCATION:\n`;
+      content.education.forEach(edu => {
+        resumeText += `${edu.degree} - ${edu.institution} (${edu.year})`;
+        if (edu.gpa) resumeText += ` - GPA: ${edu.gpa}`;
+        resumeText += `\n`;
+      });
+      resumeText += `\n`;
+    }
+
+    if (content.skills && content.skills.length > 0) {
+      resumeText += `SKILLS:\n${Array.isArray(content.skills) ? content.skills.join(', ') : content.skills}\n\n`;
+    }
+
+    if (content.projects && content.projects.length > 0) {
+      resumeText += `PROJECTS:\n`;
+      content.projects.forEach(proj => {
+        resumeText += `${proj.title}\n${proj.description}\n`;
+        if (proj.link) resumeText += `Link: ${proj.link}\n`;
+        resumeText += `\n`;
+      });
+    }
+
+    const prompt = `As an expert resume optimizer and ATS specialist, analyze this resume against the provided job description and provide specific optimization recommendations.
+
+CURRENT RESUME:
+${resumeText}
+
+TARGET JOB DESCRIPTION:
+${jobDescription}
+
+Provide a comprehensive analysis in JSON format:
+{
+  "matchScore": <number 0-100>,
+  "overallAssessment": "<string>",
+  "keywordAnalysis": {
+    "matchingKeywords": ["<keyword1>", "<keyword2>"],
+    "missingKeywords": ["<keyword1>", "<keyword2>"],
+    "keywordsToAdd": [
+      {
+        "keyword": "<keyword>",
+        "priority": "<high|medium|low>",
+        "suggestion": "<where and how to add it>"
+      }
+    ]
+  },
+  "experienceOptimization": [
+    {
+      "currentSection": "<which experience section>",
+      "issue": "<what's lacking>",
+      "optimizedVersion": "<improved version with job-specific keywords>",
+      "reasoning": "<why this change helps>"
+    }
+  ],
+  "skillsOptimization": {
+    "skillsToHighlight": ["<skill1>", "<skill2>"],
+    "skillsToAdd": ["<skill1>", "<skill2>"],
+    "skillsToRemove": ["<skill1>", "<skill2>"]
+  },
+  "summaryOptimization": {
+    "currentIssues": ["<issue1>", "<issue2>"],
+    "optimizedSummary": "<job-specific professional summary>",
+    "keyPhrasesAdded": ["<phrase1>", "<phrase2>"]
+  },
+  "atsCompatibility": {
+    "score": <number 0-100>,
+    "issues": ["<issue1>", "<issue2>"],
+    "recommendations": ["<recommendation1>", "<recommendation2>"]
+  },
+  "actionItems": [
+    {
+      "action": "<specific action>",
+      "priority": "<high|medium|low>",
+      "impact": "<expected impact>",
+      "example": "<concrete example>"
+    }
+  ],
+  "estimatedImprovement": "<expected improvement in ATS score>"
+}
+
+Focus on:
+1. Exact keyword matches from job description
+2. Required skills and qualifications alignment
+3. Experience relevance to job requirements
+4. ATS-friendly formatting for this specific role
+5. Quantifiable achievements relevant to the position
+6. Industry-specific terminology from the job posting
+
+Be specific and actionable in all suggestions.`;
+
+    try {
+      const response = await axios.post(
+        this.apiUrl,
+        {
+          model: this.model,
+          messages: [
+            {
+              role: 'system',
+              content: 'You are an expert resume optimizer specializing in tailoring resumes to specific job descriptions while maintaining ATS compatibility. You provide detailed, actionable recommendations that significantly improve job match scores.'
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.7,
+          max_tokens: 2500
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          }
+        }
+      );
+
+      const optimization = response.data.choices[0].message.content;
+      return this.parseJobOptimizationResponse(optimization);
+
+    } catch (error) {
+      console.error('Mistral AI Error (Job Optimization):', error.response?.data || error.message);
+      throw new Error(`Job Optimization Failed: ${error.response?.data?.message || error.message}`);
+    }
+  }
+
+  /**
+   * Parse job optimization response
+   */
+  parseJobOptimizationResponse(content) {
+    try {
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        return parsed;
+      }
+
+      console.warn('Could not parse job optimization response as JSON');
+      return {
+        matchScore: 0,
+        overallAssessment: 'Unable to complete analysis. Please try again.',
+        keywordAnalysis: {
+          matchingKeywords: [],
+          missingKeywords: [],
+          keywordsToAdd: []
+        },
+        experienceOptimization: [],
+        skillsOptimization: {
+          skillsToHighlight: [],
+          skillsToAdd: [],
+          skillsToRemove: []
+        },
+        summaryOptimization: {
+          currentIssues: [],
+          optimizedSummary: '',
+          keyPhrasesAdded: []
+        },
+        atsCompatibility: {
+          score: 0,
+          issues: [],
+          recommendations: []
+        },
+        actionItems: [],
+        estimatedImprovement: 'Unknown'
+      };
+
+    } catch (error) {
+      console.error('Error parsing job optimization response:', error);
+      return {
+        matchScore: 0,
+        overallAssessment: 'Error processing analysis.',
+        keywordAnalysis: {
+          matchingKeywords: [],
+          missingKeywords: [],
+          keywordsToAdd: []
+        },
+        experienceOptimization: [],
+        skillsOptimization: {
+          skillsToHighlight: [],
+          skillsToAdd: [],
+          skillsToRemove: []
+        },
+        summaryOptimization: {
+          currentIssues: [],
+          optimizedSummary: '',
+          keyPhrasesAdded: []
+        },
+        atsCompatibility: {
+          score: 0,
+          issues: [],
+          recommendations: []
+        },
+        actionItems: [],
+        estimatedImprovement: 'Unknown'
+      };
+    }
+  }
 }
 
 module.exports = new AIService();

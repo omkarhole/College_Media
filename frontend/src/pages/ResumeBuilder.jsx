@@ -1,15 +1,19 @@
 import { useState, useEffect } from 'react';
 import api from '../services/api'; 
-import { Plus, Trash2, Upload, Save, Sparkles, Download, Eye, Shield, CheckCircle, AlertCircle, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, Upload, Save, Sparkles, Download, Eye, Shield, CheckCircle, AlertCircle, AlertTriangle, Target, TrendingUp } from 'lucide-react';
 
 const ResumeBuilder = () => {
   const [activeTab, setActiveTab] = useState('build');
   const [loading, setLoading] = useState(false);
   const [aiGenerating, setAiGenerating] = useState(false);
   const [atsChecking, setAtsChecking] = useState(false);
+  const [jobOptimizing, setJobOptimizing] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
   const [atsResults, setAtsResults] = useState(null);
   const [showAtsModal, setShowAtsModal] = useState(false);
+  const [jobOptResults, setJobOptResults] = useState(null);
+  const [showJobOptModal, setShowJobOptModal] = useState(false);
+  const [jobDescription, setJobDescription] = useState('');
   
   const [personalInfo, setPersonalInfo] = useState({
     name: '',
@@ -295,6 +299,67 @@ const ResumeBuilder = () => {
     }
   };
 
+  // New function: Optimize for Job Description
+  const handleJobOptimization = async () => {
+    if (!jobDescription || jobDescription.trim().length < 50) {
+      setMessage({ 
+        type: 'error', 
+        text: 'Please provide a detailed job description (at least 50 characters).' 
+      });
+      return;
+    }
+
+    setJobOptimizing(true);
+    setMessage({ type: '', text: '' });
+
+    try {
+      const optPayload = {
+        personalInfo: {
+          name: personalInfo.name,
+          email: personalInfo.email,
+          phone: personalInfo.phone,
+          linkedin: personalInfo.linkedin
+        },
+        summary: personalInfo.summary,
+        content: {
+          experience: formData.experience.filter(exp => exp.title || exp.company),
+          education: formData.education.filter(edu => edu.degree || edu.institution),
+          skills: formData.skills.split(',').map(skill => skill.trim()).filter(Boolean),
+          projects: formData.projects.filter(proj => proj.title || proj.description)
+        },
+        jobDescription: jobDescription
+      };
+
+      if (optPayload.content.experience.length === 0 && optPayload.content.education.length === 0) {
+        setMessage({ 
+          type: 'error', 
+          text: 'Please provide at least some experience or education details.' 
+        });
+        return;
+      }
+
+      const response = await api.post('/resume/optimize-for-job', optPayload);
+      
+      if (response.data.success) {
+        setJobOptResults(response.data.data);
+        setShowJobOptModal(true);
+        setMessage({ 
+          type: 'success', 
+          text: `✅ Job match score: ${response.data.data.matchScore}%! Review optimization suggestions.` 
+        });
+      }
+
+    } catch (error) {
+      console.error('Job optimization error:', error);
+      setMessage({ 
+        type: 'error', 
+        text: error.response?.data?.message || 'Failed to optimize for job description.' 
+      });
+    } finally {
+      setJobOptimizing(false);
+    }
+  };
+
   // ATS Results Modal Component
   const ATSResultsModal = () => {
     if (!showAtsModal || !atsResults) return null;
@@ -461,10 +526,312 @@ const ResumeBuilder = () => {
     );
   };
 
+  // Job Optimization Results Modal Component
+  const JobOptimizationModal = () => {
+    if (!showJobOptModal || !jobOptResults) return null;
+
+    const getMatchColor = (score) => {
+      if (score >= 80) return 'text-green-600';
+      if (score >= 60) return 'text-yellow-600';
+      return 'text-red-600';
+    };
+
+    const getMatchBgColor = (score) => {
+      if (score >= 80) return 'bg-green-100';
+      if (score >= 60) return 'bg-yellow-100';
+      return 'bg-red-100';
+    };
+
+    const getPriorityColor = (priority) => {
+      switch (priority) {
+        case 'high': return 'bg-red-100 text-red-800';
+        case 'medium': return 'bg-yellow-100 text-yellow-800';
+        case 'low': return 'bg-blue-100 text-blue-800';
+        default: return 'bg-gray-100 text-gray-800';
+      }
+    };
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-5xl w-full max-h-[90vh] overflow-y-auto">
+          {/* Header */}
+          <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-6 z-10">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Target className="text-indigo-600" size={32} />
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Job-Specific Optimization</h2>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Tailored recommendations for this position</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowJobOptModal(false)}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+
+          <div className="p-6 space-y-6">
+            {/* Match Score */}
+            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-lg p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-2">Job Match Score</h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">{jobOptResults.overallAssessment}</p>
+                </div>
+                <div className="text-center">
+                  <div className={`text-5xl font-bold ${getMatchColor(jobOptResults.matchScore)}`}>
+                    {jobOptResults.matchScore}%
+                  </div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">match</div>
+                  <div className="flex items-center justify-center gap-2 mt-2">
+                    <TrendingUp className={jobOptResults.matchScore >= 70 ? 'text-green-500' : 'text-orange-500'} size={20} />
+                    <span className="text-sm font-medium">Est. Improvement: {jobOptResults.estimatedImprovement}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Keyword Analysis */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
+                <Target size={20} className="text-indigo-600" />
+                Keyword Analysis
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Matching Keywords */}
+                <div className="border border-green-200 dark:border-green-700 bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
+                  <h4 className="font-medium text-green-800 dark:text-green-300 mb-2 flex items-center gap-2">
+                    <CheckCircle size={16} />
+                    Matching Keywords ({jobOptResults.keywordAnalysis.matchingKeywords.length})
+                  </h4>
+                  <div className="flex flex-wrap gap-1">
+                    {jobOptResults.keywordAnalysis.matchingKeywords.map((keyword, idx) => (
+                      <span key={idx} className="text-xs px-2 py-1 bg-green-200 dark:bg-green-800 text-green-800 dark:text-green-200 rounded">
+                        {keyword}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Missing Keywords */}
+                <div className="border border-orange-200 dark:border-orange-700 bg-orange-50 dark:bg-orange-900/20 rounded-lg p-4">
+                  <h4 className="font-medium text-orange-800 dark:text-orange-300 mb-2 flex items-center gap-2">
+                    <AlertCircle size={16} />
+                    Missing Keywords ({jobOptResults.keywordAnalysis.missingKeywords.length})
+                  </h4>
+                  <div className="flex flex-wrap gap-1">
+                    {jobOptResults.keywordAnalysis.missingKeywords.map((keyword, idx) => (
+                      <span key={idx} className="text-xs px-2 py-1 bg-orange-200 dark:bg-orange-800 text-orange-800 dark:text-orange-200 rounded">
+                        {keyword}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Keywords to Add */}
+              {jobOptResults.keywordAnalysis.keywordsToAdd && jobOptResults.keywordAnalysis.keywordsToAdd.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  <h4 className="font-medium text-gray-800 dark:text-white">How to Add Missing Keywords:</h4>
+                  {jobOptResults.keywordAnalysis.keywordsToAdd.map((item, idx) => (
+                    <div key={idx} className="border-l-4 border-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 p-3 rounded-r">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1">
+                          <span className="font-medium text-indigo-800 dark:text-indigo-300">{item.keyword}</span>
+                          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{item.suggestion}</p>
+                        </div>
+                        <span className={`px-2 py-1 rounded text-xs font-medium whitespace-nowrap ${getPriorityColor(item.priority)}`}>
+                          {item.priority}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Optimized Summary */}
+            {jobOptResults.summaryOptimization && jobOptResults.summaryOptimization.optimizedSummary && (
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-3">Optimized Professional Summary</h3>
+                <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-700">
+                  <p className="text-gray-700 dark:text-gray-300 italic">"{jobOptResults.summaryOptimization.optimizedSummary}"</p>
+                  {jobOptResults.summaryOptimization.keyPhrasesAdded && jobOptResults.summaryOptimization.keyPhrasesAdded.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">
+                      <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Key phrases added:</p>
+                      <div className="flex flex-wrap gap-1">
+                        {jobOptResults.summaryOptimization.keyPhrasesAdded.map((phrase, idx) => (
+                          <span key={idx} className="text-xs px-2 py-1 bg-indigo-100 dark:bg-indigo-800 text-indigo-800 dark:text-indigo-200 rounded">
+                            {phrase}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Experience Optimization */}
+            {jobOptResults.experienceOptimization && jobOptResults.experienceOptimization.length > 0 && (
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-3">Experience Optimization</h3>
+                <div className="space-y-3">
+                  {jobOptResults.experienceOptimization.map((exp, idx) => (
+                    <div key={idx} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                      <div className="flex items-start justify-between mb-2">
+                        <h4 className="font-medium text-gray-800 dark:text-white">{exp.currentSection}</h4>
+                        <span className="text-xs px-2 py-1 bg-yellow-100 text-yellow-800 rounded">needs update</span>
+                      </div>
+                      <p className="text-sm text-red-600 dark:text-red-400 mb-2">
+                        <strong>Issue:</strong> {exp.issue}
+                      </p>
+                      <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded p-3 mb-2">
+                        <p className="text-sm font-medium text-green-800 dark:text-green-300 mb-1">Optimized version:</p>
+                        <p className="text-sm text-gray-700 dark:text-gray-300">{exp.optimizedVersion}</p>
+                      </div>
+                      <p className="text-xs text-gray-600 dark:text-gray-400">
+                        <strong>Why:</strong> {exp.reasoning}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Skills Optimization */}
+            {jobOptResults.skillsOptimization && (
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-3">Skills Optimization</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {jobOptResults.skillsOptimization.skillsToHighlight && jobOptResults.skillsOptimization.skillsToHighlight.length > 0 && (
+                    <div className="border border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
+                      <h4 className="font-medium text-blue-800 dark:text-blue-300 mb-2 text-sm">✨ Highlight These</h4>
+                      <div className="flex flex-wrap gap-1">
+                        {jobOptResults.skillsOptimization.skillsToHighlight.map((skill, idx) => (
+                          <span key={idx} className="text-xs px-2 py-1 bg-blue-200 dark:bg-blue-800 text-blue-800 dark:text-blue-200 rounded">
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {jobOptResults.skillsOptimization.skillsToAdd && jobOptResults.skillsOptimization.skillsToAdd.length > 0 && (
+                    <div className="border border-green-200 dark:border-green-700 bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
+                      <h4 className="font-medium text-green-800 dark:text-green-300 mb-2 text-sm">➕ Add These</h4>
+                      <div className="flex flex-wrap gap-1">
+                        {jobOptResults.skillsOptimization.skillsToAdd.map((skill, idx) => (
+                          <span key={idx} className="text-xs px-2 py-1 bg-green-200 dark:bg-green-800 text-green-800 dark:text-green-200 rounded">
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {jobOptResults.skillsOptimization.skillsToRemove && jobOptResults.skillsOptimization.skillsToRemove.length > 0 && (
+                    <div className="border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                      <h4 className="font-medium text-gray-800 dark:text-gray-300 mb-2 text-sm">➖ Consider Removing</h4>
+                      <div className="flex flex-wrap gap-1">
+                        {jobOptResults.skillsOptimization.skillsToRemove.map((skill, idx) => (
+                          <span key={idx} className="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 rounded">
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Action Items */}
+            {jobOptResults.actionItems && jobOptResults.actionItems.length > 0 && (
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-3 flex items-center gap-2">
+                  <CheckCircle className="text-indigo-500" size={20} />
+                  Action Items
+                </h3>
+                <div className="space-y-3">
+                  {jobOptResults.actionItems.map((action, idx) => (
+                    <div key={idx} className="border-l-4 border-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-r">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="font-medium text-gray-800 dark:text-white">{action.action}</h4>
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${getPriorityColor(action.priority)}`}>
+                              {action.priority}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                            <strong>Impact:</strong> {action.impact}
+                          </p>
+                          {action.example && (
+                            <div className="bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded p-2 mt-2">
+                              <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Example:</p>
+                              <p className="text-xs text-gray-700 dark:text-gray-300 italic">{action.example}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ATS Compatibility for this Job */}
+            {jobOptResults.atsCompatibility && (
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-3">ATS Compatibility for This Job</h3>
+                <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-gray-700 dark:text-gray-300">Score for this specific role:</span>
+                    <span className={`text-2xl font-bold ${getMatchColor(jobOptResults.atsCompatibility.score)}`}>
+                      {jobOptResults.atsCompatibility.score}/100
+                    </span>
+                  </div>
+                  {jobOptResults.atsCompatibility.recommendations && jobOptResults.atsCompatibility.recommendations.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Recommendations:</p>
+                      <ul className="space-y-1">
+                        {jobOptResults.atsCompatibility.recommendations.map((rec, idx) => (
+                          <li key={idx} className="text-sm text-gray-600 dark:text-gray-400 flex items-start gap-2">
+                            <span className="text-indigo-500 mt-1">•</span>
+                            <span>{rec}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="sticky bottom-0 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 p-4">
+            <button
+              onClick={() => setShowJobOptModal(false)}
+              className="w-full px-6 py-3 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+            >
+              Close Optimization Report
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="max-w-4xl mx-auto p-6 bg-white dark:bg-gray-800 rounded-lg shadow-md mt-6">
       {/* ATS Results Modal */}
       <ATSResultsModal />
+      
+      {/* Job Optimization Modal */}
+      <JobOptimizationModal />
       
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Resume Builder</h1>
@@ -533,6 +900,38 @@ const ResumeBuilder = () => {
               >
                 <Sparkles size={20} />
                 {aiGenerating ? 'Generating with AI...' : 'Generate Resume with AI'}
+              </button>
+            </section>
+
+            {/* ATS Compatibility Check Section */}
+            <section className="p-6 bg-gradient-to-r from-orange-50 to-yellow-50 dark:from-orange-900/20 dark:to-yellow-900/20 rounded-lg border-2 border-orange-200 dark:border-orange-700">
+              <div className="mb-4">
+                <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-2 mb-2">
+                  <Shield className="text-orange-600" size={24} />
+                  ATS Compatibility Check
+                </h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Check if your resume is optimized for Applicant Tracking Systems used by employers
+                </p>
+              </div>
+              
+              <button
+                type="button"
+                onClick={handleATSCheck}
+                disabled={atsChecking}
+                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-orange-600 to-yellow-600 text-white font-medium rounded-lg hover:from-orange-700 hover:to-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg"
+              >
+                {atsChecking ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    Checking ATS Compatibility...
+                  </>
+                ) : (
+                  <>
+                    <Shield size={20} />
+                    Check ATS Compatibility
+                  </>
+                )}
               </button>
             </section>
 
@@ -701,6 +1100,62 @@ const ResumeBuilder = () => {
                 className="w-full p-3 border rounded-lg dark:bg-gray-800 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-indigo-500"
                 rows="3"
               />
+            </section>
+
+            {/* Job Description Optimization Section */}
+            <section className="p-6 bg-gradient-to-r from-green-50 to-teal-50 dark:from-green-900/20 dark:to-teal-900/20 rounded-lg border-2 border-green-200 dark:border-green-700">
+              <div className="mb-4">
+                <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-2 mb-2">
+                  <Target className="text-green-600" size={24} />
+                  Job Description Optimization
+                </h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Paste a specific job description to get tailored optimization suggestions for that role
+                </p>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Job Description
+                  </label>
+                  <textarea
+                    placeholder="Paste the full job description here (minimum 50 characters)...&#10;&#10;Example:&#10;We are looking for a Senior Software Engineer with 5+ years of experience in React, Node.js, and cloud technologies. The ideal candidate will have strong problem-solving skills and experience with microservices architecture..."
+                    value={jobDescription}
+                    onChange={(e) => setJobDescription(e.target.value)}
+                    className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-white min-h-[150px] resize-y focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  />
+                  <div className="flex items-center justify-between mt-2">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {jobDescription.length} / 50 minimum characters
+                    </p>
+                    {jobDescription.length > 0 && jobDescription.length < 50 && (
+                      <span className="text-xs text-orange-600 dark:text-orange-400">
+                        ⚠ Need {50 - jobDescription.length} more characters
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleJobOptimization}
+                  disabled={jobOptimizing || jobDescription.trim().length < 50}
+                  className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white font-medium rounded-lg hover:from-green-700 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg"
+                >
+                  {jobOptimizing ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                      Optimizing for Job...
+                    </>
+                  ) : (
+                    <>
+                      <TrendingUp size={20} />
+                      Optimize Resume for This Job
+                    </>
+                  )}
+                </button>
+              </div>
             </section>
 
           </div>

@@ -362,4 +362,66 @@ router.post('/ats-check', protect, async (req, res) => {
   }
 });
 
+// @route   POST /api/resume/optimize-for-job
+// @desc    Optimize resume for specific job description
+// @access  Private
+router.post('/optimize-for-job', protect, async (req, res) => {
+  console.log('🎯 /resume/optimize-for-job HIT');
+  
+  try {
+    const { content, summary, personalInfo, jobDescription } = req.body;
+
+    // Validate inputs
+    if (!jobDescription || jobDescription.trim().length < 50) {
+      console.log('⚠️ Validation failed: insufficient job description');
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Please provide a detailed job description (at least 50 characters).' 
+      });
+    }
+
+    if (!content || (!content.experience && !content.education)) {
+      console.log('⚠️ Validation failed: insufficient resume data');
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Please provide resume content (experience or education).' 
+      });
+    }
+
+    console.log('➡️ Starting job-specific optimization...');
+    console.log('📊 Analyzing:', {
+      jobDescriptionLength: jobDescription.length,
+      hasPersonalInfo: !!personalInfo,
+      hasSummary: !!summary,
+      experienceCount: content.experience?.length || 0,
+      educationCount: content.education?.length || 0
+    });
+
+    // Optimize resume for job description
+    const optimization = await Promise.race([
+      aiService.optimizeForJobDescription({ content, summary, personalInfo }, jobDescription),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Job optimization timed out after 60 seconds')), 60000)
+      )
+    ]);
+
+    console.log('✅ Job optimization completed successfully');
+    console.log('📈 Match Score:', optimization.matchScore);
+
+    res.json({
+      success: true,
+      message: 'Resume optimized for job description',
+      data: optimization
+    });
+
+  } catch (err) {
+    console.error('❌ Job optimization failed:', err.message);
+    console.error('Stack trace:', err.stack);
+    return res.status(500).json({ 
+      success: false, 
+      message: err.message || 'Failed to optimize resume. Please check your API key configuration.' 
+    });
+  }
+});
+
 module.exports = router;
