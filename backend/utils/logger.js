@@ -1,17 +1,22 @@
 /**
  * ============================================================
- * JobRunner – Advanced Background Job Executor
- * ------------------------------------------------------------
+ * JobRunner – Advanced Background Job Executor (HARDENED)
+ * ============================================================
  * ✔ Retry with exponential backoff
  * ✔ Timeout protection
  * ✔ Dead Letter Queue handling
- * ✔ Correlation ID propagation
+ * ✔ Correlation / Request ID propagation
  * ✔ Async context safe
- * ✔ Structured logging
+ * ✔ Structured & redacted logging
  * ✔ Lifecycle hooks
+ * ✔ Cancellation support
+ * ✔ Concurrency protection
+ * ✔ Execution metrics
  * ✔ Production ready
  * ============================================================
  */
+
+"use strict";
 
 const { randomUUID } = require("crypto");
 const {
@@ -27,6 +32,7 @@ const logger = require("./logger");
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_BACKOFF_MS = 2000;
 const DEFAULT_TIMEOUT_MS = 5000;
+const DEFAULT_MAX_RUNTIME_MS = 60000;
 
 /* ============================================================
    🧠 INTERNAL HELPERS
@@ -42,6 +48,7 @@ const generateJobExecutionId = () => {
     return (
       "job_" +
       Date.now().toString(36) +
+      "_" +
       Math.random().toString(36).slice(2)
     );
   }
@@ -56,8 +63,35 @@ const sleep = (ms) =>
 /**
  * Calculate exponential backoff
  */
-const calculateBackoff = (base, attempt) => {
-  return base * Math.pow(2, attempt - 1);
+const calculateBackoff = (base, attempt) =>
+  base * Math.pow(2, attempt - 1);
+
+/**
+ * Safe promise race timeout
+ */
+const withTimeout = (promise, ms) => {
+  let timeoutHandle;
+  const timeout = new Promise((_, reject) => {
+    timeoutHandle = setTimeout(
+      () => reject(new Error("Job execution timed out")),
+      ms
+    );
+  });
+
+  return Promise.race([promise, timeout]).finally(() =>
+    clearTimeout(timeoutHandle)
+  );
+};
+
+/* ============================================================
+   📊 EXECUTION METRICS (IN-MEMORY)
+============================================================ */
+const metrics = {
+  totalRuns: 0,
+  success: 0,
+  failure: 0,
+  retries: 0,
+  timeouts: 0,
 };
 
 /* ============================================================
@@ -70,8 +104,11 @@ class JobRunner {
     maxRetries = DEFAULT_MAX_RETRIES,
     backoffMs = DEFAULT_BACKOFF_MS,
     timeoutMs = DEFAULT_TIMEOUT_MS,
+    maxRuntimeMs = DEFAULT_MAX_RUNTIME_MS,
     onSuccess,
     onFailure,
+    onStart,
+    onFinally,
   }) {
     if (!jobName) throw new Error("jobName is required");
     if (typeof handler !== "function")
@@ -82,112 +119,151 @@ class JobRunner {
     this.maxRetries = maxRetries;
     this.backoffMs = backoffMs;
     this.timeoutMs = timeoutMs;
+    this.maxRuntimeMs = maxRuntimeMs;
     this.onSuccess = onSuccess;
     this.onFailure = onFailure;
+    this.onStart = onStart;
+    this.onFinally = onFinally;
+
+    this._cancelled = false;
+    this._running = false;
+  }
+
+  /* ============================================================
+     🚫 CANCEL SUPPORT
+  ============================================================ */
+  cancel() {
+    this._cancelled = true;
+    logger.warn("Job cancelled by caller", {
+      jobName: this.jobName,
+    });
   }
 
   /* ============================================================
      🚀 PUBLIC RUN METHOD
   ============================================================ */
   async run(payload = {}, context = {}) {
-    const attemptContextRequestId =
-      context.requestId || getRequestId();
+    if (this._running) {
+      throw new Error("Job is already running");
+    }
 
+    this._running = true;
+    metrics.totalRuns++;
+
+    const requestId = context.requestId || getRequestId();
     const jobExecutionId = generateJobExecutionId();
-
-    let attempt = 0;
+    const startedAt = Date.now();
 
     return withRequestContext(async () => {
       logger.info("Background job started", {
         jobName: this.jobName,
         jobExecutionId,
-        requestId: attemptContextRequestId,
+        requestId,
         payload,
       });
 
-      while (attempt <= this.maxRetries) {
-        attempt++;
+      if (typeof this.onStart === "function") {
+        await this.onStart({
+          jobName: this.jobName,
+          jobExecutionId,
+        });
+      }
 
-        try {
+      let attempt = 0;
+
+      try {
+        while (attempt <= this.maxRetries) {
+          if (this._cancelled) {
+            throw new Error("Job execution cancelled");
+          }
+
+          attempt++;
+
           logger.info("Job attempt started", {
             jobName: this.jobName,
             jobExecutionId,
             attempt,
           });
 
-          const result = await this._runWithTimeout(
-            () => this.handler(payload, context),
-            this.timeoutMs
-          );
+          try {
+            const result = await withTimeout(
+              this.handler(payload, context),
+              this.timeoutMs
+            );
 
-          logger.info("Job succeeded", {
-            jobName: this.jobName,
-            jobExecutionId,
-            attempt,
-          });
+            metrics.success++;
 
-          if (typeof this.onSuccess === "function") {
-            await this.onSuccess(result, {
+            logger.info("Job succeeded", {
               jobName: this.jobName,
               jobExecutionId,
               attempt,
+              durationMs: Date.now() - startedAt,
             });
-          }
 
-          return result;
-        } catch (error) {
-          logger.error("Job attempt failed", {
-            jobName: this.jobName,
-            jobExecutionId,
-            attempt,
-            error: error.message,
-            stack: error.stack,
-          });
+            if (typeof this.onSuccess === "function") {
+              await this.onSuccess(result, {
+                jobName: this.jobName,
+                jobExecutionId,
+                attempt,
+              });
+            }
 
-          if (attempt > this.maxRetries) {
-            await this._handlePermanentFailure(
-              error,
-              payload,
-              jobExecutionId
+            return result;
+          } catch (error) {
+            metrics.retries++;
+
+            logger.error("Job attempt failed", {
+              jobName: this.jobName,
+              jobExecutionId,
+              attempt,
+              error: error.message,
+            });
+
+            if (attempt > this.maxRetries) {
+              throw error;
+            }
+
+            const delay = calculateBackoff(
+              this.backoffMs,
+              attempt
             );
-            throw error;
+
+            logger.warn("Retrying job after backoff", {
+              jobName: this.jobName,
+              jobExecutionId,
+              attempt,
+              delayMs: delay,
+            });
+
+            await sleep(delay);
           }
 
-          const delay = calculateBackoff(
-            this.backoffMs,
-            attempt
-          );
+          if (Date.now() - startedAt > this.maxRuntimeMs) {
+            metrics.timeouts++;
+            throw new Error("Job exceeded max runtime limit");
+          }
+        }
+      } catch (error) {
+        metrics.failure++;
 
-          logger.warn("Retrying job after backoff", {
+        await this._handlePermanentFailure(
+          error,
+          payload,
+          jobExecutionId
+        );
+
+        throw error;
+      } finally {
+        this._running = false;
+
+        if (typeof this.onFinally === "function") {
+          await this.onFinally({
             jobName: this.jobName,
             jobExecutionId,
-            attempt,
-            delayMs: delay,
           });
-
-          await sleep(delay);
         }
       }
     });
-  }
-
-  /* ============================================================
-     ⏱️ TIMEOUT GUARD
-  ============================================================ */
-  async _runWithTimeout(fn, timeoutMs) {
-    let timeoutHandle;
-
-    const timeoutPromise = new Promise((_, reject) => {
-      timeoutHandle = setTimeout(() => {
-        reject(new Error("Job execution timed out"));
-      }, timeoutMs);
-    });
-
-    try {
-      return await Promise.race([fn(), timeoutPromise]);
-    } finally {
-      clearTimeout(timeoutHandle);
-    }
   }
 
   /* ============================================================
@@ -220,23 +296,13 @@ class JobRunner {
   }
 
   /* ============================================================
-     📦 DEAD LETTER QUEUE
+     📦 DEAD LETTER QUEUE (ABSTRACTION)
   ============================================================ */
   async _moveToDeadLetterQueue(
     error,
     payload,
     jobExecutionId
   ) {
-    /**
-     * NOTE:
-     * This is an abstraction point.
-     * Can be replaced with:
-     * - MongoDB collection
-     * - Redis DLQ
-     * - Kafka topic
-     * - SQS DLQ
-     */
-
     logger.error("Job moved to Dead Letter Queue", {
       jobName: this.jobName,
       jobExecutionId,
@@ -244,6 +310,13 @@ class JobRunner {
       payload,
       timestamp: new Date().toISOString(),
     });
+  }
+
+  /* ============================================================
+     📊 METRICS ACCESSOR
+  ============================================================ */
+  static getMetrics() {
+    return { ...metrics };
   }
 }
 
