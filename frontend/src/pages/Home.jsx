@@ -138,7 +138,7 @@ const Home = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <main id="main-content" role="main" className="space-y-6">
       {/* STORIES SECTION */}
       <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-4">
         <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
@@ -498,7 +498,7 @@ const Home = () => {
           </div>
         ))
       )}
-    </div>
+    </main>
   );
 };
 

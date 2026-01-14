@@ -1,7 +1,16 @@
-import { createContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 
 // Exported for use with useContext(AccessibilityContext)
 export const AccessibilityContext = createContext();
+
+// Custom hook for consuming accessibility context
+export const useAccessibility = () => {
+  const context = useContext(AccessibilityContext);
+  if (!context) {
+    throw new Error('useAccessibility must be used within AccessibilityProvider');
+  }
+  return context;
+};
 
 export const AccessibilityProvider = ({ children }) => {
   // 1. SSR-Safe Initialization

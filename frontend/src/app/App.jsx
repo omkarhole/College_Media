@@ -84,6 +84,10 @@ const AppContent = ({ layoutState }) => {
 
   return (
     <>
+      {/* Skip to main content link for keyboard users */}
+      <a href="#main-content" className="skip-link sr-only-focusable">
+        Skip to main content
+      </a>
       <AppRoutes props={layoutState} />
       <KeyboardShortcutsHelp
         isOpen={showShortcutsHelp}
