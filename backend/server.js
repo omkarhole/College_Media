@@ -223,6 +223,7 @@ app.use("/api/admin", adminLimiter, require("./routes/admin"));
 app.use("/api/resume", resumeRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/messages", require("./routes/messages"));
+app.use("/api/keys", require("./routes/keys"));
 app.use("/api/notifications", require("./routes/notifications"));
 app.use("/api/account", require("./routes/account"));
 
