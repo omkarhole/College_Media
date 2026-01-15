@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 const Post = require('../models/Post');
 const User = require('../models/User');
 const ModerationService = require('../services/moderationService');
-const RecommenderService = require('../services/recommender');
+const RecommendationEngine = require('../services/recommendationEngine');
 const EventPublisher = require('../events/publisher');
 const AIModerator = require('../services/aiModerator');
 const logger = require('../utils/logger');
@@ -140,7 +140,7 @@ router.post('/:postId/like', verifyToken, async (req, res) => {
         const { postId } = req.params;
 
         // Track interaction for recommendations
-        await RecommenderService.trackInteraction(req.userId, postId, 'post', 'like');
+        await RecommendationEngine.trackInteraction(req.userId, postId, 'Post', 'LIKE');
 
         // Update like count and get post
         const post = await Post.findByIdAndUpdate(postId, { $inc: { likeCount: 1 } }, { new: true });
