@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Icon } from '@iconify/react';
 import { useNotifications } from '../context/NotificationContext';
 import NotificationItem from './NotificationItem';
@@ -21,7 +21,7 @@ const NotificationCenter = () => {
   const [page, setPage] = useState(1);
 
   // Load more notifications with pagination
-  const loadMore = async () => {
+  const loadMore = useCallback(async () => {
     if (loading || !hasMore) return;
 
     try {
@@ -44,7 +44,7 @@ const NotificationCenter = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [loading, hasMore, page, filter]);
 
   // Reset notifications when filter changes
   useEffect(() => {
@@ -70,7 +70,7 @@ const NotificationCenter = () => {
 
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
-  }, [loading, hasMore, page, filter]);
+  }, [loading, hasMore, page, filter, loadMore]);
 
   const filters = [
     { value: 'all', label: 'All', icon: 'mdi:bell' },

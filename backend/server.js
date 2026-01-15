@@ -57,7 +57,8 @@ const { client: metricsClient } = require("./utils/metrics");
 /* ============================================================
    🌱 ENV SETUP
 ============================================================ */
-dotenv.config();
+const envPath = process.env.NODE_ENV === 'test' ? '.env.test' : '.env';
+dotenv.config({ path: envPath });
 
 const ENV = process.env.NODE_ENV || "development";
 const PORT = process.env.PORT || 5000;
@@ -105,7 +106,10 @@ app.disable("x-powered-by");
 ============================================================ */
 app.use(helmet());
 app.use(compression());
-app.use(cors({ origin: true, credentials: true }));
+app.use(cors({
+  origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['http://localhost:3000'],
+  credentials: true
+}));
 app.use(cookieParser());
 app.use(express.json({
   limit: "2mb",

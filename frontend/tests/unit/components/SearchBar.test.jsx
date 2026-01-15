@@ -42,7 +42,7 @@ vi.mock('../../../src/utils/searchHistory', () => ({
 }));
 
 vi.mock('../../../src/components/SearchSuggestions', () => ({
-    default: ({ suggestions, loading, query, history, onSelect, onClose }) => (
+    default: ({ suggestions, loading, history, onSelect, onClose }) => (
         <div data-testid="search-suggestions">
             {loading && <div>Loading...</div>}
             {suggestions.map((s) => (

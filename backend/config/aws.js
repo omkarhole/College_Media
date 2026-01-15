@@ -3,23 +3,19 @@ const multer = require('multer');
 const multerS3 = require('multer-s3');
 const path = require('path');
 const logger = require('../utils/logger');
-
 // Configure AWS SDK
 AWS.config.update({
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
     region: process.env.AWS_REGION || 'us-east-1'
 });
-
 const s3 = new AWS.S3();
-
 // Check if S3 is configured
 const isS3Configured = () => {
     return !!(process.env.AWS_ACCESS_KEY_ID &&
               process.env.AWS_SECRET_ACCESS_KEY &&
               process.env.AWS_S3_BUCKET);
 };
-
 // S3 storage configuration for different file types
 const s3Storage = (folder = 'uploads') => {
     return multerS3({
@@ -35,10 +31,10 @@ const s3Storage = (folder = 'uploads') => {
             cb(null, filename);
         },
         contentType: multerS3.AUTO_CONTENT_TYPE,
-        acl: 'public-read' // Make files publicly accessible
+        acl: 'public-read', // Make files publicly accessible
+        serverSideEncryption: 'AES256'
     });
 };
-
 // Direct upload function for processed files
 const uploadToS3 = async (buffer, key, contentType = 'image/jpeg') => {
     const params = {
@@ -46,7 +42,8 @@ const uploadToS3 = async (buffer, key, contentType = 'image/jpeg') => {
         Key: key,
         Body: buffer,
         ContentType: contentType,
-        ACL: 'public-read'
+        ACL: 'public-read',
+        ServerSideEncryption: 'AES256'
     };
 
     try {
@@ -58,13 +55,11 @@ const uploadToS3 = async (buffer, key, contentType = 'image/jpeg') => {
         throw error;
     }
 };
-
 // Get S3 URL
 const getS3Url = (key) => {
     if (!key) return null;
     return `https://${process.env.AWS_S3_BUCKET}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${key}`;
 };
-
 module.exports = {
     s3,
     isS3Configured,

@@ -245,7 +245,6 @@ const Collections = () => {
 // Collection Card Component
 const CollectionCard = ({ collection, onDelete }) => {
   const [showMenu, setShowMenu] = useState(false);
-  const navigate = useNavigate();
 
   return (
     <Link

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Icon } from "@iconify/react";
 import SearchBar from "../components/SearchBar";
@@ -24,7 +24,7 @@ const SearchResults = () => {
 
   // Fetch search results
   
-  const fetchResults = async (pageNum) => {
+  const fetchResults = useCallback(async (pageNum) => {
     if (!query.trim()) return;
 
     setLoading(true);
@@ -51,25 +51,25 @@ const SearchResults = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [query, filters]);
 
   const handleFilterChange = (newFilters) => {
     setFilters((prev) => ({ ...prev, ...newFilters }));
     setPage(1);
   };
 
-  const handleLoadMore = () => {
+  const handleLoadMore = useCallback(() => {
     if (!loading && hasMore) {
       fetchResults(page + 1);
     }
-  };
+  }, [loading, hasMore, page, fetchResults]);
 
 useEffect(() => {
     if (query) {
       fetchResults(1);
       addToSearchHistory(query);
     }
-  }, [query, filters]);
+  }, [query, filters, fetchResults]);
 
   // Infinite scroll
   useEffect(() => {
@@ -87,7 +87,7 @@ useEffect(() => {
     }
 
     return () => window.removeEventListener("scroll", handleScroll);
-  }, [hasMore, loading, page]);
+  }, [hasMore, loading, page, handleLoadMore]);
 
   // Filter results by type for tabs
   const getFilteredResults = (type) => {

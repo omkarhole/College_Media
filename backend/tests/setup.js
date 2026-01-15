@@ -1,23 +1,128 @@
 const { MongoMemoryServer } = require('mongodb-memory-server');
 const mongoose = require('mongoose');
+const path = require('path');
 
-// Mock Resend to avoid API key requirement and network calls
+// Load test environment variables
+require('dotenv').config({ path: path.join(__dirname, '..', '.env.test') });
+
+// Mock external services to avoid API calls and dependencies
 jest.mock('resend', () => {
     return {
         Resend: jest.fn().mockImplementation(() => ({
             emails: {
-                send: jest.fn().mockResolvedValue({ id: 'mock-email-id' })
+                send: jest.fn().mockResolvedValue({
+                    id: 'mock-email-id',
+                    data: { id: 'mock-email-id' },
+                    error: null
+                })
             }
         }))
     };
 });
 
-// Also mock the emailService explicitly if needed, but mocking resend should be enough 
-// if the service just instantiates it. 
-// However, the error happened at instantiation time in the module scope.
-// So we need to ensure the mock is applied BEFORE the service defines the instance.
-// Jest's module mocking should handle this if we define it here, but `app` require might execute first.
-// We should move `require('../server')` AFTER the mock.
+// Mock Redis
+jest.mock('ioredis', () => {
+    return jest.fn().mockImplementation(() => ({
+        connect: jest.fn(),
+        disconnect: jest.fn(),
+        get: jest.fn(),
+        set: jest.fn(),
+        del: jest.fn(),
+        expire: jest.fn(),
+        ttl: jest.fn(),
+        keys: jest.fn(),
+        on: jest.fn(),
+        quit: jest.fn()
+    }));
+});
+
+// Mock Cloudinary
+jest.mock('cloudinary', () => ({
+    v2: {
+        config: jest.fn(),
+        uploader: {
+            upload: jest.fn().mockResolvedValue({
+                public_id: 'mock-public-id',
+                secure_url: 'https://mock.cloudinary.com/image.jpg'
+            }),
+            destroy: jest.fn().mockResolvedValue({ result: 'ok' })
+        }
+    }
+}));
+
+// Mock AWS SDK
+jest.mock('aws-sdk', () => ({
+    S3: jest.fn().mockImplementation(() => ({
+        upload: jest.fn().mockReturnValue({
+            promise: jest.fn().mockResolvedValue({
+                Location: 'https://mock-s3.amazonaws.com/test-file.jpg',
+                Key: 'test-file.jpg'
+            })
+        }),
+        deleteObject: jest.fn().mockReturnValue({
+            promise: jest.fn().mockResolvedValue({})
+        }),
+        getSignedUrl: jest.fn().mockReturnValue('https://mock-s3.amazonaws.com/signed-url')
+    })),
+    config: {
+        update: jest.fn()
+    }
+}));
+
+// Mock Stripe
+jest.mock('stripe', () => {
+    return jest.fn().mockImplementation(() => ({
+        customers: {
+            create: jest.fn().mockResolvedValue({ id: 'cus_mock' }),
+            retrieve: jest.fn().mockResolvedValue({ id: 'cus_mock' })
+        },
+        paymentIntents: {
+            create: jest.fn().mockResolvedValue({ id: 'pi_mock', client_secret: 'secret_mock' })
+        },
+        webhooks: {
+            constructEvent: jest.fn().mockReturnValue({ type: 'payment_intent.succeeded' })
+        }
+    }));
+});
+
+// Mock OpenAI
+jest.mock('openai', () => {
+    return jest.fn().mockImplementation(() => ({
+        chat: {
+            completions: {
+                create: jest.fn().mockResolvedValue({
+                    choices: [{ message: { content: 'Mock AI response' } }]
+                })
+            }
+        }
+    }));
+});
+
+// Mock logger to avoid JobRunner issues
+jest.mock('../utils/logger', () => ({
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    critical: jest.fn(),
+    logRequest: jest.fn(),
+    logResponse: jest.fn(),
+}));
+
+// Mock metrics
+jest.mock('../utils/metrics', () => ({
+    client: {
+        increment: jest.fn(),
+        timing: jest.fn(),
+        gauge: jest.fn(),
+    }
+}));
+
+// Mock live stream service
+jest.mock('../services/liveStreamService', () => ({
+    init: jest.fn(),
+    shutdown: jest.fn(),
+}));
 
 // Require app AFTER mocking
 const app = require('../server');

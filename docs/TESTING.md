@@ -1,420 +1,1029 @@
-# 🧪 Testing Guide for College Media
+# Testing Guide
 
-## Overview
-
-This project uses **Vitest** as the testing framework and **React Testing Library** for component testing. This guide will help you understand how to write, run, and maintain tests.
+This comprehensive guide covers the testing strategy and implementation for the College Media platform, including unit tests, integration tests, end-to-end tests, and CI/CD integration.
 
 ## Table of Contents
 
-- [Getting Started](#getting-started)
-- [Running Tests](#running-tests)
-- [Writing Tests](#writing-tests)
-- [Best Practices](#best-practices)
+- [Testing Philosophy](#testing-philosophy)
+- [Testing Strategy](#testing-strategy)
+- [Project Setup](#project-setup)
+- [Unit Testing](#unit-testing)
+- [Component Testing](#component-testing)
+- [Integration Testing](#integration-testing)
+- [End-to-End Testing](#end-to-end-testing)
 - [Test Coverage](#test-coverage)
+- [Mocking Strategies](#mocking-strategies)
 - [CI/CD Integration](#cicd-integration)
+- [Best Practices](#best-practices)
+- [Troubleshooting](#troubleshooting)
 
----
+## Testing Philosophy
 
-## Getting Started
+Our testing approach follows these core principles:
 
-### Prerequisites
+- **Test-Driven Development (TDD)**: Write tests before implementing features
+- **Quality over Quantity**: Focus on meaningful tests that provide value
+- **Fast Feedback**: Tests should run quickly to enable rapid development
+- **Maintainable**: Tests should be easy to understand and modify
+- **Realistic**: Tests should reflect actual user behavior and edge cases
 
-All testing dependencies are already installed. If you need to reinstall:
+## Testing Strategy
 
-```bash
-npm install --legacy-peer-deps
-```
+### Testing Pyramid
 
-### Test Setup
-
-The test environment is configured in:
-- `vitest.config.js` - Main Vitest configuration
-- `src/setupTests.js` - Global test setup and mocks
-
----
-
-## Running Tests
-
-### Available Commands
-
-```bash
-# Run tests in watch mode (recommended for development)
-npm test
-
-# Run tests with UI dashboard
-npm run test:ui
-
-# Run all tests once (useful for CI)
-npm run test:run
-
-# Generate coverage report
-npm run test:coverage
-```
-
-### Watch Mode
-
-Watch mode automatically reruns tests when files change:
-
-```bash
-npm test
-```
-
-Press `q` to quit, `a` to run all tests, `f` to run only failed tests.
-
-### UI Mode
-
-For a visual testing experience:
-
-```bash
-npm run test:ui
-```
-
-This opens an interactive dashboard at `http://localhost:51204`
-
----
-
-## Writing Tests
-
-### Test File Structure
-
-Place test files next to the component they test or in a `__tests__` directory:
+We follow the testing pyramid approach:
 
 ```
-src/
-  components/
-    Navbar.jsx
-    __tests__/
-      Navbar.test.jsx
+End-to-End Tests (E2E)
+    ↕️
+Integration Tests
+    ↕️
+Unit Tests
 ```
 
-### Basic Test Template
+- **Unit Tests** (80%): Test individual functions and components in isolation
+- **Integration Tests** (15%): Test interactions between components and services
+- **E2E Tests** (5%): Test complete user workflows from start to finish
 
-```jsx
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import YourComponent from '../YourComponent';
+### Test Categories
 
-describe('YourComponent', () => {
-  it('renders correctly', () => {
-    render(<YourComponent />);
-    expect(screen.getByText(/expected text/i)).toBeInTheDocument();
-  });
+#### Frontend Tests
+- **Component Tests**: UI component behavior and interactions
+- **Hook Tests**: Custom React hooks logic
+- **Utility Tests**: Helper functions and utilities
+- **Integration Tests**: Component integration and data flow
 
-  it('handles user interaction', async () => {
-    const user = userEvent.setup();
-    render(<YourComponent />);
-    
-    const button = screen.getByRole('button');
-    await user.click(button);
-    
-    expect(screen.getByText(/result/i)).toBeInTheDocument();
-  });
-});
+#### Backend Tests
+- **Unit Tests**: Individual functions and middleware
+- **Integration Tests**: API endpoints and database operations
+- **Authentication Tests**: JWT and security features
+
+#### End-to-End Tests
+- **User Journeys**: Complete user workflows
+- **Critical Paths**: Login, posting, profile management
+- **Cross-browser**: Compatibility across different browsers
+
+## Project Setup
+
+### Dependencies
+
+```json
+{
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.1.4",
+    "@testing-library/react": "^14.0.0",
+    "@testing-library/user-event": "^14.5.1",
+    "@vitest/ui": "^0.34.6",
+    "jsdom": "^22.1.0",
+    "playwright": "^1.40.1",
+    "supertest": "^6.3.3",
+    "vitest": "^0.34.6"
+  }
+}
 ```
 
-### Testing Components with Context
+### Configuration Files
 
-```jsx
-import { BrowserRouter } from 'react-router-dom';
-import { AuthProvider } from '../../context/AuthContext';
+#### Vitest Configuration (vitest.config.js)
 
-const renderWithProviders = (ui) => {
-  return render(
-    <BrowserRouter>
-      <AuthProvider>
-        {ui}
-      </AuthProvider>
-    </BrowserRouter>
-  );
-};
+```javascript
+/// <reference types="vitest" />
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
 
-describe('Component with Context', () => {
-  it('works with context', () => {
-    renderWithProviders(<MyComponent />);
-    // Your assertions here
-  });
-});
+export default defineConfig({
+  plugins: [react()],
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: ['./src/test/setup.ts'],
+    coverage: {
+      reporter: ['text', 'json', 'html'],
+      exclude: [
+        'node_modules/',
+        'src/test/',
+        '**/*.d.ts',
+      ],
+    },
+  },
+})
 ```
 
-### Mocking Modules
+#### Test Setup (src/test/setup.ts)
 
-```jsx
-import { vi } from 'vitest';
+```typescript
+import '@testing-library/jest-dom'
+import { expect, afterEach } from 'vitest'
+import { cleanup } from '@testing-library/react'
+import * as matchers from '@testing-library/jest-dom/matchers'
 
-vi.mock('../../context/AuthContext', () => ({
-  useAuth: vi.fn(() => ({
-    user: { id: '1', username: 'testuser' },
-  })),
-}));
-```
-
-### Testing User Interactions
-
-```jsx
-import userEvent from '@testing-library/user-event';
-
-it('handles text input', async () => {
-  const user = userEvent.setup();
-  render(<MyForm />);
-  
-  const input = screen.getByPlaceholderText(/enter text/i);
-  await user.type(input, 'Hello World');
-  
-  expect(input).toHaveValue('Hello World');
-});
-```
-
-### Testing Async Operations
-
-```jsx
-import { waitFor } from '@testing-library/react';
-
-it('loads data', async () => {
-  render(<MyComponent />);
-  
-  await waitFor(() => {
-    expect(screen.getByText(/loaded/i)).toBeInTheDocument();
-  });
-});
-```
-
----
-
-## Best Practices
-
-### 1. Follow the Testing Trophy
-
-Focus on:
-- ✅ Integration tests (most valuable)
-- ✅ Unit tests for complex logic
-- ✅ E2E tests for critical paths
-
-### 2. Query Priority
-
-Use queries in this order:
-1. `getByRole` - Best for accessibility
-2. `getByLabelText` - Great for forms
-3. `getByPlaceholderText` - For inputs
-4. `getByText` - For content
-5. `getByTestId` - Last resort
-
-```jsx
-// ✅ Good - Accessible
-const button = screen.getByRole('button', { name: /submit/i });
-
-// ❌ Avoid - Not accessible
-const button = screen.getByTestId('submit-button');
-```
-
-### 3. Test Behavior, Not Implementation
-
-```jsx
-// ✅ Good - Tests user behavior
-it('shows error message when form is invalid', async () => {
-  const user = userEvent.setup();
-  render(<LoginForm />);
-  
-  await user.click(screen.getByRole('button', { name: /login/i }));
-  
-  expect(screen.getByText(/email is required/i)).toBeInTheDocument();
-});
-
-// ❌ Bad - Tests implementation details
-it('sets error state to true', () => {
-  const { result } = renderHook(() => useLoginForm());
-  act(() => result.current.validate());
-  expect(result.current.hasError).toBe(true);
-});
-```
-
-### 4. Use Descriptive Test Names
-
-```jsx
-// ✅ Good
-it('displays error message when email is invalid');
-it('submits form when all fields are valid');
-it('disables submit button while loading');
-
-// ❌ Bad
-it('works correctly');
-it('test 1');
-it('should work');
-```
-
-### 5. Keep Tests Independent
-
-Each test should run independently without relying on others.
-
-```jsx
-// ✅ Good
-describe('Counter', () => {
-  it('starts at zero', () => {
-    render(<Counter />);
-    expect(screen.getByText(/count: 0/i)).toBeInTheDocument();
-  });
-
-  it('increments when button is clicked', async () => {
-    const user = userEvent.setup();
-    render(<Counter />);
-    await user.click(screen.getByRole('button', { name: /increment/i }));
-    expect(screen.getByText(/count: 1/i)).toBeInTheDocument();
-  });
-});
-```
-
-### 6. Clean Up After Tests
-
-```jsx
-import { beforeEach, afterEach, vi } from 'vitest';
-
-beforeEach(() => {
-  // Setup before each test
-  vi.clearAllMocks();
-});
+expect.extend(matchers)
 
 afterEach(() => {
-  // Cleanup after each test
-  vi.clearAllTimers();
-});
+  cleanup()
+})
 ```
 
----
+#### Playwright Configuration (playwright.config.ts)
+
+```typescript
+import { defineConfig, devices } from '@playwright/test'
+
+export default defineConfig({
+  testDir: './tests/e2e',
+  fullyParallel: true,
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 2 : 0,
+  workers: process.env.CI ? 1 : undefined,
+  reporter: 'html',
+  use: {
+    baseURL: 'http://localhost:3000',
+    trace: 'on-first-retry',
+  },
+  projects: [
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'] },
+    },
+    {
+      name: 'webkit',
+      use: { ...devices['Desktop Safari'] },
+    },
+  ],
+  webServer: {
+    command: 'npm run dev',
+    url: 'http://localhost:3000',
+    reuseExistingServer: !process.env.CI,
+  },
+})
+```
+
+## Unit Testing
+
+Unit tests focus on testing individual functions and utilities in isolation.
+
+### Utility Function Testing
+
+```javascript
+// src/utils/formatters.test.js
+import { describe, it, expect } from 'vitest'
+import { formatDate, truncateText } from './formatters'
+
+describe('formatDate', () => {
+  it('formats date correctly', () => {
+    const date = new Date('2024-01-15T10:30:00Z')
+    expect(formatDate(date)).toBe('January 15, 2024')
+  })
+
+  it('handles invalid dates', () => {
+    expect(formatDate(null)).toBe('')
+    expect(formatDate(undefined)).toBe('')
+  })
+})
+
+describe('truncateText', () => {
+  it('truncates text longer than max length', () => {
+    const text = 'This is a very long text that should be truncated'
+    expect(truncateText(text, 20)).toBe('This is a very long...')
+  })
+
+  it('returns original text if shorter than max length', () => {
+    const text = 'Short text'
+    expect(truncateText(text, 20)).toBe('Short text')
+  })
+})
+```
+
+### Custom Hook Testing
+
+```javascript
+// src/hooks/useLocalStorage.test.js
+import { renderHook, act } from '@testing-library/react'
+import { describe, it, expect, vi } from 'vitest'
+import { useLocalStorage } from './useLocalStorage'
+
+describe('useLocalStorage', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  it('returns initial value when no stored value exists', () => {
+    const { result } = renderHook(() => useLocalStorage('test-key', 'default'))
+    expect(result.current[0]).toBe('default')
+  })
+
+  it('returns stored value when it exists', () => {
+    localStorage.setItem('test-key', JSON.stringify('stored-value'))
+    const { result } = renderHook(() => useLocalStorage('test-key', 'default'))
+    expect(result.current[0]).toBe('stored-value')
+  })
+
+  it('updates stored value when setter is called', () => {
+    const { result } = renderHook(() => useLocalStorage('test-key', 'default'))
+    act(() => {
+      result.current[1]('new-value')
+    })
+    expect(result.current[0]).toBe('new-value')
+    expect(localStorage.getItem('test-key')).toBe(JSON.stringify('new-value'))
+  })
+})
+```
+
+## Component Testing
+
+Component tests verify UI component behavior and user interactions.
+
+### Basic Component Testing
+
+```javascript
+// src/components/Button.test.jsx
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { describe, it, expect } from 'vitest'
+import { Button } from './Button'
+
+describe('Button', () => {
+  it('renders button with text', () => {
+    render(<Button>Click me</Button>)
+    expect(screen.getByRole('button', { name: /click me/i })).toBeInTheDocument()
+  })
+
+  it('calls onClick when clicked', async () => {
+    const handleClick = vi.fn()
+    const user = userEvent.setup()
+
+    render(<Button onClick={handleClick}>Click me</Button>)
+    await user.click(screen.getByRole('button'))
+
+    expect(handleClick).toHaveBeenCalledTimes(1)
+  })
+
+  it('applies correct styles for variants', () => {
+    render(<Button variant="primary">Primary</Button>)
+    const button = screen.getByRole('button')
+    expect(button).toHaveClass('bg-blue-500')
+  })
+
+  it('is disabled when disabled prop is true', async () => {
+    const handleClick = vi.fn()
+    const user = userEvent.setup()
+
+    render(<Button disabled onClick={handleClick}>Disabled</Button>)
+    const button = screen.getByRole('button')
+
+    expect(button).toBeDisabled()
+    await user.click(button)
+    expect(handleClick).not.toHaveBeenCalled()
+  })
+})
+```
+
+### Form Component Testing
+
+```javascript
+// src/components/LoginForm.test.jsx
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { describe, it, expect, vi } from 'vitest'
+import { LoginForm } from './LoginForm'
+
+describe('LoginForm', () => {
+  it('submits form with valid data', async () => {
+    const handleSubmit = vi.fn()
+    const user = userEvent.setup()
+
+    render(<LoginForm onSubmit={handleSubmit} />)
+
+    await user.type(screen.getByLabelText(/email/i), 'test@example.com')
+    await user.type(screen.getByLabelText(/password/i), 'password123')
+    await user.click(screen.getByRole('button', { name: /login/i }))
+
+    await waitFor(() => {
+      expect(handleSubmit).toHaveBeenCalledWith({
+        email: 'test@example.com',
+        password: 'password123'
+      })
+    })
+  })
+
+  it('shows validation errors for empty fields', async () => {
+    const user = userEvent.setup()
+
+    render(<LoginForm onSubmit={() => {}} />)
+
+    await user.click(screen.getByRole('button', { name: /login/i }))
+
+    expect(screen.getByText(/email is required/i)).toBeInTheDocument()
+    expect(screen.getByText(/password is required/i)).toBeInTheDocument()
+  })
+
+  it('shows loading state during submission', async () => {
+    const user = userEvent.setup()
+
+    render(<LoginForm onSubmit={() => new Promise(resolve => setTimeout(resolve, 1000))} />)
+
+    await user.type(screen.getByLabelText(/email/i), 'test@example.com')
+    await user.type(screen.getByLabelText(/password/i), 'password123')
+    await user.click(screen.getByRole('button', { name: /login/i }))
+
+    expect(screen.getByText(/logging in/i)).toBeInTheDocument()
+    expect(screen.getByRole('button')).toBeDisabled()
+  })
+})
+```
+
+## Integration Testing
+
+Integration tests verify that different parts of the application work together correctly.
+
+### API Integration Testing
+
+```javascript
+// backend/tests/integration/auth.test.js
+const request = require('supertest')
+const mongoose = require('mongoose')
+const { MongoMemoryServer } = require('mongodb-memory-server')
+const app = require('../server')
+const User = require('../models/User')
+
+describe('Authentication API', () => {
+  let mongoServer
+
+  beforeAll(async () => {
+    mongoServer = await MongoMemoryServer.create()
+    const mongoUri = mongoServer.getUri()
+    await mongoose.connect(mongoUri)
+  })
+
+  afterAll(async () => {
+    await mongoose.disconnect()
+    await mongoServer.stop()
+  })
+
+  beforeEach(async () => {
+    await User.deleteMany({})
+  })
+
+  describe('POST /api/auth/register', () => {
+    it('should register a new user', async () => {
+      const userData = {
+        username: 'testuser',
+        email: 'test@example.com',
+        password: 'Password123!',
+        firstName: 'Test',
+        lastName: 'User'
+      }
+
+      const response = await request(app)
+        .post('/api/auth/register')
+        .send(userData)
+        .expect(201)
+
+      expect(response.body.success).toBe(true)
+      expect(response.body.message).toBe('User registered successfully')
+
+      const user = await User.findOne({ email: userData.email })
+      expect(user).toBeTruthy()
+      expect(user.username).toBe(userData.username)
+    })
+
+    it('should not register user with existing email', async () => {
+      await User.create({
+        username: 'existing',
+        email: 'test@example.com',
+        password: 'password123'
+      })
+
+      const response = await request(app)
+        .post('/api/auth/register')
+        .send({
+          username: 'newuser',
+          email: 'test@example.com',
+          password: 'Password123!'
+        })
+        .expect(400)
+
+      expect(response.body.success).toBe(false)
+      expect(response.body.message).toBe('User already exists')
+    })
+  })
+
+  describe('POST /api/auth/login', () => {
+    beforeEach(async () => {
+      await User.create({
+        username: 'testuser',
+        email: 'test@example.com',
+        password: 'Password123!'
+      })
+    })
+
+    it('should login with valid credentials', async () => {
+      const response = await request(app)
+        .post('/api/auth/login')
+        .send({
+          email: 'test@example.com',
+          password: 'Password123!'
+        })
+        .expect(200)
+
+      expect(response.body.success).toBe(true)
+      expect(response.body.accessToken).toBeDefined()
+      expect(response.body.user).toBeDefined()
+    })
+
+    it('should not login with invalid credentials', async () => {
+      const response = await request(app)
+        .post('/api/auth/login')
+        .send({
+          email: 'test@example.com',
+          password: 'wrongpassword'
+        })
+        .expect(401)
+
+      expect(response.body.success).toBe(false)
+      expect(response.body.message).toBe('Invalid credentials')
+    })
+  })
+})
+```
+
+### Database Integration Testing
+
+```javascript
+// backend/tests/integration/userService.test.js
+const mongoose = require('mongoose')
+const { MongoMemoryServer } = require('mongodb-memory-server')
+const User = require('../models/User')
+const userService = require('../services/userService')
+
+describe('User Service', () => {
+  let mongoServer
+
+  beforeAll(async () => {
+    mongoServer = await MongoMemoryServer.create()
+    const mongoUri = mongoServer.getUri()
+    await mongoose.connect(mongoUri)
+  })
+
+  afterAll(async () => {
+    await mongoose.disconnect()
+    await mongoServer.stop()
+  })
+
+  beforeEach(async () => {
+    await User.deleteMany({})
+  })
+
+  describe('createUser', () => {
+    it('should create a new user', async () => {
+      const userData = {
+        username: 'testuser',
+        email: 'test@example.com',
+        password: 'Password123!',
+        firstName: 'Test',
+        lastName: 'User'
+      }
+
+      const user = await userService.createUser(userData)
+
+      expect(user.username).toBe(userData.username)
+      expect(user.email).toBe(userData.email)
+      expect(user.firstName).toBe(userData.firstName)
+      expect(user.password).not.toBe(userData.password) // Should be hashed
+    })
+
+    it('should throw error for duplicate email', async () => {
+      const userData = {
+        username: 'testuser1',
+        email: 'test@example.com',
+        password: 'Password123!'
+      }
+
+      await userService.createUser(userData)
+
+      await expect(userService.createUser({
+        ...userData,
+        username: 'testuser2'
+      })).rejects.toThrow('User already exists')
+    })
+  })
+
+  describe('findUserById', () => {
+    it('should find user by ID', async () => {
+      const createdUser = await User.create({
+        username: 'testuser',
+        email: 'test@example.com',
+        password: 'Password123!'
+      })
+
+      const user = await userService.findUserById(createdUser._id)
+
+      expect(user.username).toBe('testuser')
+      expect(user.email).toBe('test@example.com')
+    })
+
+    it('should return null for non-existent user', async () => {
+      const user = await userService.findUserById('507f1f77bcf86cd799439011')
+      expect(user).toBeNull()
+    })
+  })
+})
+```
+
+## End-to-End Testing
+
+E2E tests simulate real user interactions across the entire application.
+
+### Playwright Test Examples
+
+```javascript
+// tests/e2e/auth.spec.js
+import { test, expect } from '@playwright/test'
+
+test.describe('Authentication', () => {
+  test('should allow user to register and login', async ({ page }) => {
+    // Navigate to registration page
+    await page.goto('/register')
+
+    // Fill registration form
+    await page.fill('[data-testid="username"]', 'testuser')
+    await page.fill('[data-testid="email"]', 'test@example.com')
+    await page.fill('[data-testid="password"]', 'Password123!')
+    await page.fill('[data-testid="confirm-password"]', 'Password123!')
+
+    // Submit form
+    await page.click('[data-testid="register-button"]')
+
+    // Should redirect to login or dashboard
+    await expect(page).toHaveURL(/\/login|\/dashboard/)
+
+    // Login with created account
+    if (page.url().includes('/login')) {
+      await page.fill('[data-testid="email"]', 'test@example.com')
+      await page.fill('[data-testid="password"]', 'Password123!')
+      await page.click('[data-testid="login-button"]')
+    }
+
+    // Should be logged in
+    await expect(page.locator('[data-testid="user-menu"]')).toBeVisible()
+  })
+
+  test('should show error for invalid login', async ({ page }) => {
+    await page.goto('/login')
+
+    await page.fill('[data-testid="email"]', 'invalid@example.com')
+    await page.fill('[data-testid="password"]', 'wrongpassword')
+    await page.click('[data-testid="login-button"]')
+
+    await expect(page.locator('[data-testid="error-message"]')).toContainText('Invalid credentials')
+  })
+})
+```
+
+```javascript
+// tests/e2e/post-creation.spec.js
+import { test, expect } from '@playwright/test'
+
+test.describe('Post Creation', () => {
+  test.beforeEach(async ({ page }) => {
+    // Login before each test
+    await page.goto('/login')
+    await page.fill('[data-testid="email"]', 'test@example.com')
+    await page.fill('[data-testid="password"]', 'Password123!')
+    await page.click('[data-testid="login-button"]')
+    await expect(page.locator('[data-testid="user-menu"]')).toBeVisible()
+  })
+
+  test('should create a new post', async ({ page }) => {
+    // Navigate to create post page
+    await page.goto('/create-post')
+
+    // Fill post form
+    await page.fill('[data-testid="post-title"]', 'Test Post Title')
+    await page.fill('[data-testid="post-content"]', 'This is a test post content.')
+
+    // Upload image
+    await page.setInputFiles('[data-testid="image-upload"]', 'tests/fixtures/test-image.jpg')
+
+    // Submit post
+    await page.click('[data-testid="submit-post"]')
+
+    // Should redirect to post page
+    await expect(page).toHaveURL(/\/post\/.+/)
+
+    // Verify post content
+    await expect(page.locator('[data-testid="post-title"]')).toContainText('Test Post Title')
+    await expect(page.locator('[data-testid="post-content"]')).toContainText('This is a test post content.')
+    await expect(page.locator('[data-testid="post-image"]')).toBeVisible()
+  })
+
+  test('should validate required fields', async ({ page }) => {
+    await page.goto('/create-post')
+
+    // Try to submit without content
+    await page.click('[data-testid="submit-post"]')
+
+    // Should show validation errors
+    await expect(page.locator('[data-testid="content-error"]')).toContainText('Content is required')
+  })
+
+  test('should handle image upload errors', async ({ page }) => {
+    await page.goto('/create-post')
+
+    // Try to upload invalid file
+    await page.setInputFiles('[data-testid="image-upload"]', 'tests/fixtures/invalid-file.txt')
+
+    await expect(page.locator('[data-testid="upload-error"]')).toContainText('Invalid file type')
+  })
+})
+```
+
+### Visual Regression Testing
+
+```javascript
+// tests/e2e/visual-regression.spec.js
+import { test, expect } from '@playwright/test'
+
+test.describe('Visual Regression', () => {
+  test('homepage should match visual baseline', async ({ page }) => {
+    await page.goto('/')
+    await expect(page).toHaveScreenshot('homepage.png')
+  })
+
+  test('login form should match visual baseline', async ({ page }) => {
+    await page.goto('/login')
+    await expect(page.locator('[data-testid="login-form"]')).toHaveScreenshot('login-form.png')
+  })
+
+  test('post card should match visual baseline', async ({ page }) => {
+    await page.goto('/posts')
+    await expect(page.locator('[data-testid="post-card"]').first()).toHaveScreenshot('post-card.png')
+  })
+})
+```
 
 ## Test Coverage
 
-### Viewing Coverage
+### Coverage Requirements
 
-Generate a coverage report:
+- **Statements**: ≥ 80%
+- **Branches**: ≥ 75%
+- **Functions**: ≥ 85%
+- **Lines**: ≥ 80%
+
+### Coverage Configuration
+
+```javascript
+// vitest.config.js
+export default defineConfig({
+  test: {
+    coverage: {
+      reporter: ['text', 'json', 'html', 'lcov'],
+      exclude: [
+        'node_modules/',
+        'src/test/',
+        '**/*.d.ts',
+        '**/*.config.js',
+        'src/main.jsx',
+      ],
+      thresholds: {
+        global: {
+          statements: 80,
+          branches: 75,
+          functions: 85,
+          lines: 80,
+        },
+      },
+    },
+  },
+})
+```
+
+### Coverage Report Analysis
 
 ```bash
+# Run tests with coverage
 npm run test:coverage
+
+# View coverage report
+open coverage/index.html
+
+# Check coverage for specific files
+npx vitest run --coverage --reporter=verbose
 ```
 
-Open the HTML report:
+## Mocking Strategies
 
-```bash
-# The report is in coverage/index.html
-open coverage/index.html  # macOS
-start coverage/index.html # Windows
-xdg-open coverage/index.html # Linux
+### API Mocking
+
+```javascript
+// src/test/mocks/handlers.js
+import { rest } from 'msw'
+
+export const handlers = [
+  rest.get('/api/posts', (req, res, ctx) => {
+    return res(
+      ctx.json({
+        success: true,
+        data: [
+          {
+            id: '1',
+            title: 'Mock Post',
+            content: 'Mock content',
+            author: 'Mock Author'
+          }
+        ]
+      })
+    )
+  }),
+
+  rest.post('/api/posts', (req, res, ctx) => {
+    return res(
+      ctx.status(201),
+      ctx.json({
+        success: true,
+        data: {
+          id: '2',
+          ...req.body
+        }
+      })
+    )
+  })
+]
 ```
 
-### Coverage Goals
+```javascript
+// src/test/mocks/server.js
+import { setupServer } from 'msw/node'
+import { handlers } from './handlers'
 
-- **Statements**: 80%+
-- **Branches**: 70%+
-- **Functions**: 80%+
-- **Lines**: 80%+
+export const server = setupServer(...handlers)
+```
 
-### Excluding Files from Coverage
+```javascript
+// src/test/setup.ts
+import { beforeAll, afterEach, afterAll } from 'vitest'
+import { server } from './mocks/server'
 
-Add to `vitest.config.js`:
+beforeAll(() => server.listen())
+afterEach(() => server.resetHandlers())
+afterAll(() => server.close())
+```
 
-```js
-coverage: {
-  exclude: [
-    'node_modules/',
-    'src/setupTests.js',
-    '**/*.config.js',
-    '**/mockData.js',
-  ],
+### Component Mocking
+
+```javascript
+// src/components/__mocks__/UserAvatar.jsx
+const UserAvatar = ({ user, size = 'md' }) => {
+  return `<div data-testid="user-avatar" data-size="${size}">
+    Mock Avatar for ${user.name}
+  </div>`
 }
+
+export default UserAvatar
 ```
 
----
+### Service Mocking
+
+```javascript
+// src/services/__mocks__/api.js
+export const api = {
+  get: vi.fn(),
+  post: vi.fn(),
+  put: vi.fn(),
+  delete: vi.fn(),
+}
+
+// Mock implementations
+api.get.mockResolvedValue({
+  data: { success: true, data: [] }
+})
+
+api.post.mockResolvedValue({
+  data: { success: true, data: { id: '123' } }
+})
+```
 
 ## CI/CD Integration
 
-### GitHub Actions
+### GitHub Actions Configuration
 
-Tests run automatically on:
-- Every push to `main` or `develop`
-- Every pull request
+```yaml
+# .github/workflows/test.yml
+name: Tests
 
-See `.github/workflows/test.yml` for configuration.
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
 
-### Pre-commit Hook (Optional)
+jobs:
+  test:
+    runs-on: ubuntu-latest
 
-Add to `.husky/pre-commit`:
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
 
-```bash
-#!/bin/sh
-npm run test:run
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run linting
+      run: npm run lint
+
+    - name: Run unit tests
+      run: npm run test:unit
+
+    - name: Run integration tests
+      run: npm run test:integration
+
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage/lcov.info
+
+  e2e:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Use Node.js 18.x
+      uses: actions/setup-node@v4
+      with:
+        node-version: 18.x
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Install Playwright
+      run: npx playwright install --with-deps
+
+    - name: Run E2E tests
+      run: npm run test:e2e
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: playwright-report
+        path: playwright-report/
+        retention-days: 30
 ```
 
----
+### Test Scripts
 
-## Testing Checklist
-
-When writing tests for a component:
-
-- [ ] Renders without crashing
-- [ ] Displays correct initial content
-- [ ] Handles user interactions (clicks, typing, etc.)
-- [ ] Shows loading states appropriately
-- [ ] Displays error messages correctly
-- [ ] Has proper accessibility attributes
-- [ ] Works with different props
-- [ ] Calls callbacks with correct arguments
-- [ ] Handles edge cases (empty states, errors, etc.)
-
----
-
-## Common Issues & Solutions
-
-### Issue: Tests timeout
-
-**Solution**: Increase timeout in `vitest.config.js`:
-
-```js
-test: {
-  testTimeout: 10000,
+```json
+{
+  "scripts": {
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage",
+    "test:unit": "vitest --run tests/unit",
+    "test:integration": "vitest --run tests/integration",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "lint": "eslint src --ext .js,.jsx,.ts,.tsx",
+    "lint:fix": "eslint src --ext .js,.jsx,.ts,.tsx --fix"
+  }
 }
 ```
 
-### Issue: Module not found
+## Best Practices
 
-**Solution**: Check path aliases in `vitest.config.js`:
+### Writing Good Tests
 
-```js
-resolve: {
-  alias: {
-    '@': path.resolve(__dirname, './src'),
-  },
-}
+1. **Descriptive Names**: Use clear, descriptive test names
+2. **Single Responsibility**: Each test should verify one behavior
+3. **Arrange-Act-Assert**: Structure tests clearly
+4. **Avoid Magic Numbers**: Use named constants
+5. **Test Edge Cases**: Include boundary conditions and error scenarios
+
+### Test Organization
+
+```
+tests/
+├── unit/                 # Unit tests
+│   ├── components/      # Component tests
+│   ├── hooks/          # Hook tests
+│   ├── utils/          # Utility tests
+│   └── services/       # Service tests
+├── integration/         # Integration tests
+│   ├── api/            # API tests
+│   └── database/       # Database tests
+├── e2e/                # End-to-end tests
+│   ├── auth.spec.js
+│   ├── posts.spec.js
+│   └── profile.spec.js
+└── fixtures/           # Test data
+    ├── users.json
+    ├── posts.json
+    └── images/
 ```
 
-### Issue: Mock not working
+### Performance Considerations
 
-**Solution**: Make sure to clear mocks between tests:
+- **Fast Tests**: Keep unit tests under 100ms each
+- **Parallel Execution**: Run tests in parallel when possible
+- **Selective Testing**: Use `--run` flag for specific test files
+- **Mock Heavy Dependencies**: Mock slow operations like API calls
 
-```js
-beforeEach(() => {
-  vi.clearAllMocks();
-});
+## Troubleshooting
+
+### Common Test Issues
+
+#### Tests Failing Randomly
+
+**Symptoms**: Tests pass locally but fail in CI, or pass/fail inconsistently
+
+**Solutions**:
+- Check for race conditions in async code
+- Ensure proper cleanup between tests
+- Use unique test data to avoid conflicts
+- Mock external dependencies consistently
+
+#### Slow Test Suite
+
+**Symptoms**: Test suite takes too long to run
+
+**Solutions**:
+- Profile tests to identify bottlenecks
+- Mock slow operations (API calls, file I/O)
+- Run tests in parallel
+- Use test.skip() for temporarily disabled tests
+
+#### Component Tests Not Finding Elements
+
+**Symptoms**: `getByText` or `getByRole` queries failing
+
+**Solutions**:
+- Check component rendering with `screen.debug()`
+- Verify element roles and accessible names
+- Wait for async operations with `waitFor`
+- Check for conditional rendering
+
+#### API Tests Failing with Connection Errors
+
+**Symptoms**: Integration tests failing with database/network errors
+
+**Solutions**:
+- Ensure test database is properly configured
+- Check MongoDB Memory Server setup
+- Verify environment variables
+- Clean up test data between runs
+
+#### Coverage Not Meeting Thresholds
+
+**Symptoms**: Coverage reports show low percentages
+
+**Solutions**:
+- Add missing test cases for uncovered code
+- Review exclusion patterns in coverage config
+- Check if dead code can be removed
+- Add integration tests for complex flows
+
+### Debugging Tests
+
+```javascript
+// Add debug logging
+test('debugging example', () => {
+  console.log('Test data:', testData)
+  // ... test code
+})
+
+// Use Vitest UI for interactive debugging
+npm run test:ui
+
+// Debug specific test
+npm run test -- --reporter=verbose path/to/test
+
+// Debug E2E tests
+npx playwright test --debug
 ```
 
----
+### Getting Help
 
-## Resources
+- Check existing issues and discussions
+- Review test examples in the codebase
+- Ask questions in development discussions
+- Refer to testing framework documentation:
+  - [Vitest](https://vitest.dev/)
+  - [Testing Library](https://testing-library.com/)
+  - [Playwright](https://playwright.dev/)
 
-- [Vitest Documentation](https://vitest.dev/)
-- [React Testing Library](https://testing-library.com/react)
-- [Testing Library Queries](https://testing-library.com/docs/queries/about)
-- [Common Mistakes](https://kentcdodds.com/blog/common-mistakes-with-react-testing-library)
-
----
-
-## Contributing
-
-When adding new features:
-
-1. Write tests for new components
-2. Update existing tests if behavior changes
-3. Run `npm run test:coverage` to ensure coverage stays high
-4. Include test results in your PR
-
----
-
-**Happy Testing! 🎉**
+This testing guide provides a comprehensive foundation for maintaining high-quality code through automated testing. Regular review and updates to the testing strategy will ensure the test suite remains effective as the application evolves.

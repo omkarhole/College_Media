@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react";
 import compression from "vite-plugin-compression";
 import { visualizer } from "rollup-plugin-visualizer";
 
-export default defineConfig(({ command, mode }) => {
+export default defineConfig(({ command }) => {
   const isBuild = command === "build";
 
   return {

@@ -408,8 +408,6 @@ describe('CreatePost Component', () => {
                 expect(callArg).toHaveProperty('caption', 'Test post');
                 expect(callArg).toHaveProperty('user');
                 expect(callArg.user).toHaveProperty('username', 'testuser');
-            });
-        });
 
         it('should not submit form without content', async () => {
             const user = userEvent.setup({ delay: null });
