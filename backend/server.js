@@ -37,6 +37,7 @@ const { Server: SocketIOServer } = require("socket.io");
 ============================================================ */
 const { initDB } = require("./config/db");
 const { initSecrets } = require("./config/vault");
+const resilienceManager = require("./services/resilienceManager");
 const { notFound } = require("./middleware/errorMiddleware");
 const logger = require("./utils/logger");
 const liveStreamService = require("./services/liveStreamService");
@@ -291,6 +292,10 @@ let dbConnection;
 const startServer = async () => {
   await initSecrets();
   dbConnection = await initDB();
+
+  // Initialize Resilience Monitoring
+  resilienceManager.startMonitoring();
+
   warmUpCache({
     User: require("./models/User"),
     Resume: require("./models/Resume"),
