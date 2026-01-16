@@ -66,8 +66,11 @@ router.get('/profile', verifyToken, async (req, res, next) => {
     const dbConnection = req.app.get('dbConnection');
 
     if (dbConnection && dbConnection.useMongoDB) {
-      // Use MongoDB
-      const user = await UserMongo.findById(req.userId).select('-password');
+      // Use CacheService (Look-Aside)
+      const user = await CacheService.getOrSet(`user:${req.userId}`, async () => {
+        return await UserMongo.findById(req.userId).select('-password');
+      });
+
       if (!user) {
         return res.status(404).json({
           success: false,
@@ -133,6 +136,9 @@ router.put('/profile', verifyToken, validateProfileUpdate, checkValidation, asyn
           req
         });
       }
+
+      // Invalidate Cache
+      await CacheService.del(`user:${req.userId}`);
 
       if (!updatedUser) {
         return res.status(404).json({
