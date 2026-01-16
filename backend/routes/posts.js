@@ -10,6 +10,7 @@ const AIModerator = require('../services/aiModerator');
 const logger = require('../utils/logger');
 const { apiLimiter } = require('../middleware/rateLimitMiddleware');
 const { checkPermission, PERMISSIONS } = require('../middleware/rbacMiddleware');
+const EmbeddingService = require('../services/embeddingService');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'college_media_secret_key';
 
@@ -110,6 +111,18 @@ router.post('/', verifyToken, apiLimiter, async (req, res) => {
             visibility,
             images
         });
+
+        // 🧠 Generate Embedding Asynchronously
+        if (content) {
+            EmbeddingService.generateEmbedding(content)
+                .then(vector => {
+                    if (vector) {
+                        post.embedding = vector;
+                        post.save().catch(err => logger.error('Embedding Save Error', err));
+                    }
+                })
+                .catch(err => logger.error('Embedding Generation Failed', err));
+        }
 
         // Trigger AI Moderation Scan
         AIModerator.scan(post._id, 'Post', content, images && images.length > 0 ? images[0] : null);

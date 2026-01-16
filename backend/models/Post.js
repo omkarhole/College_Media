@@ -122,6 +122,14 @@ const postSchema = new mongoose.Schema(
     editedAt: Date,
 
     /* -------------------------
+       🧠 SEMANTIC SEARCH
+    ------------------------- */
+    embedding: {
+      type: [Number],
+      select: false, // Hide by default to save bandwidth
+    },
+
+    /* -------------------------
        🗑 SOFT DELETE
     ------------------------- */
     isDeleted: { type: Boolean, default: false },

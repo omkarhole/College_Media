@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const Post = require('../models/Post');
 const logger = require('../utils/logger');
+const EmbeddingService = require('../services/embeddingService');
 
 /**
  * Search Controller - Handles unified search across collections
@@ -113,6 +114,17 @@ class SearchController {
             }
             if (filters.dateTo) {
                 searchQuery.createdAt = { ...searchQuery.createdAt, $lte: new Date(filters.dateTo) };
+            }
+
+            // Semantic Search Branch
+            if (sortBy === 'semantic' && query && query.trim()) {
+                const semanticResults = await this.searchSemantic(query, limit);
+                return {
+                    results: semanticResults,
+                    total: semanticResults.length,
+                    page: 1,
+                    totalPages: 1
+                };
             }
 
             // Build sort
@@ -254,6 +266,59 @@ class SearchController {
             throw error;
         }
     }
+
+    /**
+     * Perform Semantic Search using Vector Embeddings
+     * @param {string} query 
+     * @param {number} limit 
+     */
+    static async searchSemantic(query, limit = 10) {
+        try {
+            const queryVector = await EmbeddingService.generateEmbedding(query);
+            if (!queryVector) return [];
+
+            // In-Memory Vector Search (POC)
+            // Fetches recent 100 annotated posts
+            const candidates = await Post.find({
+                isDeleted: false,
+                visibility: 'public',
+                embedding: { $exists: true, $not: { $size: 0 } }
+            })
+                .select('+embedding name content user tags media likesCount commentsCount')
+                .sort({ createdAt: -1 })
+                .limit(100)
+                .populate('author', 'username firstName lastName profilePicture');
+
+            const scored = candidates.map(post => ({
+                post,
+                score: cosineSimilarity(queryVector, post.embedding)
+            }));
+
+            // Sort by Cosine Similarity desc
+            scored.sort((a, b) => b.score - a.score);
+
+            return scored.slice(0, limit).map(item => item.post); // Return post objects
+        } catch (error) {
+            logger.error('Semantic Search Algo Error:', error);
+            return [];
+        }
+    }
+}
+
+/**
+ * Calculate Cosine Similarity between two vectors
+ * @param {number[]} vecA 
+ * @param {number[]} vecB 
+ */
+function cosineSimilarity(vecA, vecB) {
+    if (!vecA || !vecB || vecA.length !== vecB.length) return 0;
+    let dot = 0.0, normA = 0.0, normB = 0.0;
+    for (let i = 0; i < vecA.length; i++) {
+        dot += vecA[i] * vecB[i];
+        normA += vecA[i] * vecA[i];
+        normB += vecB[i] * vecB[i];
+    }
+    return dot / (Math.sqrt(normA) * Math.sqrt(normB) || 1);
 }
 
 module.exports = SearchController;
