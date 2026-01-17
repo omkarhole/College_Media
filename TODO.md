@@ -5,7 +5,7 @@
 - [x] Update frontend/nginx.conf to support HTTPS on port 443
 - [x] Add TLS configuration to k8s/ingress.yaml
 - [x] Add HTTP to HTTPS redirects in netlify.toml
-- [ ] Add HTTP to HTTPS redirects in frontend/vercel.json
+- [x] Add HTTP to HTTPS redirects in frontend/vercel.json
 - [x] Generate SSL certificates for local development (optional)
 
 ## Status

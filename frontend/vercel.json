@@ -5,9 +5,16 @@
   "redirects": [
     {
       "source": "/(.*)",
-      "destination": "https://:splat",
+      "destination": "https://$host/$1",
       "permanent": true,
-      "statusCode": 301
+      "statusCode": 301,
+      "conditions": [
+        {
+          "type": "header",
+          "key": "x-forwarded-proto",
+          "value": "http"
+        }
+      ]
     }
   ]
 }
