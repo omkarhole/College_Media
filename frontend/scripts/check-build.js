@@ -36,7 +36,7 @@ function checkPackageLock() {
     const packageLockContent = fs.readFileSync(packageLockPath, 'utf8');
     JSON.parse(packageLockContent);
     console.log('✅ package-lock.json is valid');
-  } catch (error) {
+  } catch {
     console.error('❌ package-lock.json is corrupted or invalid JSON');
     console.error('Please delete package-lock.json and node_modules, then run "npm install"');
     process.exit(1);
