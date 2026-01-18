@@ -86,16 +86,43 @@ const app = express();
 
 // Create HTTP or HTTPS server based on SSL configuration
 let server;
-if (SSL_KEY_PATH && SSL_CERT_PATH && fs.existsSync(SSL_KEY_PATH) && fs.existsSync(SSL_CERT_PATH)) {
-  const sslOptions = {
-    key: fs.readFileSync(SSL_KEY_PATH),
-    cert: fs.readFileSync(SSL_CERT_PATH),
-  };
-  server = https.createServer(sslOptions, app);
-  logger.info("HTTPS server configured", { keyPath: SSL_KEY_PATH, certPath: SSL_CERT_PATH });
+if (SSL_KEY_PATH && SSL_CERT_PATH) {
+  if (fs.existsSync(SSL_KEY_PATH) && fs.existsSync(SSL_CERT_PATH)) {
+    try {
+      const sslOptions = {
+        key: fs.readFileSync(SSL_KEY_PATH),
+        cert: fs.readFileSync(SSL_CERT_PATH),
+      };
+      server = https.createServer(sslOptions, app);
+      logger.info("HTTPS server configured", { keyPath: SSL_KEY_PATH, certPath: SSL_CERT_PATH });
+    } catch (error) {
+      if (ENV === "production") {
+        logger.error("Failed to load SSL certificates in production", { error: error.message, keyPath: SSL_KEY_PATH, certPath: SSL_CERT_PATH });
+        throw new Error("SSL certificates are required in production but could not be loaded");
+      } else {
+        logger.warn("Failed to load SSL certificates, falling back to HTTP", { error: error.message, keyPath: SSL_KEY_PATH, certPath: SSL_CERT_PATH });
+        server = http.createServer(app);
+        logger.info("HTTP server configured (SSL certificate loading failed)");
+      }
+    }
+  } else {
+    if (ENV === "production") {
+      logger.error("SSL certificates not found in production", { keyPath: SSL_KEY_PATH, certPath: SSL_CERT_PATH });
+      throw new Error("SSL certificates are required in production but files do not exist");
+    } else {
+      logger.warn("SSL certificate files not found, falling back to HTTP", { keyPath: SSL_KEY_PATH, certPath: SSL_CERT_PATH });
+      server = http.createServer(app);
+      logger.info("HTTP server configured (SSL certificates not found)");
+    }
+  }
 } else {
-  server = http.createServer(app);
-  logger.info("HTTP server configured (SSL certificates not found or not configured)");
+  if (ENV === "production") {
+    logger.error("SSL_KEY_PATH and SSL_CERT_PATH must be set in production");
+    throw new Error("SSL configuration is required in production");
+  } else {
+    server = http.createServer(app);
+    logger.info("HTTP server configured (SSL not configured)");
+  }
 }
 
 // Socket.io Setup
@@ -136,10 +163,47 @@ app.disable("x-powered-by");
 /* ============================================================
    🔐 SECURITY MIDDLEWARE
 ============================================================ */
-app.use(helmet());
+// Enhanced Helmet configuration with CSP and HSTS
+const helmetConfig = {
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"], // Adjust based on needs
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
+    },
+  },
+  hsts: ENV === "production" ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
+};
+app.use(helmet(helmetConfig));
 app.use(compression());
+
+// Environment-specific CORS configuration
+let corsOrigins;
+if (ENV === "production") {
+  if (!process.env.ALLOWED_ORIGINS) {
+    throw new Error("ALLOWED_ORIGINS must be set in production environment");
+  }
+  corsOrigins = process.env.ALLOWED_ORIGINS.split(',');
+  // Validate no localhost or wildcards in production
+  corsOrigins.forEach(origin => {
+    if (origin.includes('localhost') || origin.includes('*')) {
+      throw new Error(`Invalid origin in ALLOWED_ORIGINS: ${origin}. Localhost and wildcards not allowed in production.`);
+    }
+  });
+  logger.info("CORS configured for production", { origins: corsOrigins });
+} else {
+  corsOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['http://localhost:3000', 'http://localhost:5173'];
+  logger.info("CORS configured for development", { origins: corsOrigins });
+}
+
 app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : ['http://localhost:3000'],
+  origin: corsOrigins,
   credentials: true
 }));
 app.use(cookieParser());
