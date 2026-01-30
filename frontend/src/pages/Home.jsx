@@ -1,5 +1,6 @@
 import Navbar from "../components/Navbar";
 import Hero from "../components/Hero";
+import SocialFeed from "../components/Social/SocialFeed";
 import Features from "../components/Features";
 import About from "../components/About";
 import Team from "../components/Team";
@@ -11,6 +12,7 @@ export default function Home() {
     <>
       <Navbar />
       <Hero />
+      <SocialFeed />
       <Features />
       <About />
       <Team />
