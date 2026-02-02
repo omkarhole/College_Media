@@ -1,12 +1,15 @@
 import { useContext, useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+import { FaBars, FaTimes } from 'react-icons/fa';
 
 export default function Navbar() {
   const { user, isAuthenticated, logout } = useContext(AuthContext);
   const [showDropdown, setShowDropdown] = useState(false);
   const [theme, setTheme] = useState('light');
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Initialize theme from localStorage or system preference
   useEffect(() => {
@@ -17,6 +20,21 @@ export default function Navbar() {
     document.body.classList.remove('light', 'dark');
     document.body.classList.add(initial);
   }, []);
+
+  // Close menu when route changes
+  useEffect(() => {
+    setIsMenuOpen(false);
+    setShowDropdown(false);
+  }, [location]);
+
+  // Prevent scroll when menu is open
+  useEffect(() => {
+    if (isMenuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+  }, [isMenuOpen]);
 
   const toggleTheme = () => {
     const next = theme === 'dark' ? 'light' : 'dark';
@@ -30,7 +48,7 @@ export default function Navbar() {
     logout();
     navigate('/');
     setShowDropdown(false);
-  }; 
+  };
 
   return (
     <nav>
@@ -40,7 +58,31 @@ export default function Navbar() {
           <span>ProjectX</span>
         </Link>
 
-        <div className="nav-links">
+        {/* Mobile Menu Button */}
+        <button
+          className="mobile-menu-btn"
+          onClick={() => setIsMenuOpen(!isMenuOpen)}
+          aria-label="Toggle menu"
+        >
+          {isMenuOpen ? <FaTimes /> : <FaBars />}
+        </button>
+
+        {/* Overlay */}
+        <div
+          className={`nav-overlay ${isMenuOpen ? 'active' : ''}`}
+          onClick={() => setIsMenuOpen(false)}
+        />
+
+        <div className={`nav-links ${isMenuOpen ? 'active' : ''}`}>
+          {isMenuOpen && (
+            <button
+              className="close-menu"
+              onClick={() => setIsMenuOpen(false)}
+            >
+              <FaTimes />
+            </button>
+          )}
+
           <ul>
             <li>
               <button
@@ -48,20 +90,20 @@ export default function Navbar() {
                 onClick={toggleTheme}
                 aria-label="Toggle theme"
                 title={theme === 'dark' ? 'Switch to light' : 'Switch to dark'}
-                style={{ cursor: 'pointer', background: 'none', border: 'none', fontSize: '1.1rem' }}
+                style={{ cursor: 'pointer', background: 'none', border: 'none', fontSize: '1.2rem' }}
               >
                 {theme === 'dark' ? '☀️' : '🌙'}
               </button>
             </li>
-            <li><a href="#features">Features</a></li>
-            <li><a href="#about">About</a></li>
-            <li><a href="#team">Team</a></li> 
+            <li><a href="#features" onClick={() => setIsMenuOpen(false)}>Features</a></li>
+            <li><a href="#about" onClick={() => setIsMenuOpen(false)}>About</a></li>
+            <li><a href="#team" onClick={() => setIsMenuOpen(false)}>Team</a></li>
             {isAuthenticated ? (
               <li style={{ position: 'relative' }}>
-                <button 
+                <button
                   onClick={() => setShowDropdown(!showDropdown)}
                   className="btn btn-primary"
-                  style={{ cursor: 'pointer' }}
+                  style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
                 >
                   {user?.name || 'User'} ▼
                 </button>
@@ -71,11 +113,12 @@ export default function Navbar() {
                     top: '100%',
                     right: 0,
                     marginTop: '0.5rem',
-                    backgroundColor: 'white',
+                    backgroundColor: theme === 'dark' ? '#1e293b' : 'white',
                     borderRadius: '0.5rem',
                     boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
                     minWidth: '160px',
-                    zIndex: 1000
+                    zIndex: 1000,
+                    overflow: 'hidden'
                   }}>
                     <button
                       onClick={handleLogout}
@@ -89,7 +132,7 @@ export default function Navbar() {
                         color: '#ef4444',
                         fontWeight: '500'
                       }}
-                      onMouseEnter={(e) => e.target.style.backgroundColor = '#f3f4f6'}
+                      onMouseEnter={(e) => e.target.style.backgroundColor = theme === 'dark' ? '#334155' : '#f3f4f6'}
                       onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
                     >
                       Logout
@@ -100,12 +143,12 @@ export default function Navbar() {
             ) : (
               <>
                 <li>
-                  <Link to="/login" className="btn btn-secondary">
+                  <Link to="/login" className="btn btn-secondary" onClick={() => setIsMenuOpen(false)}>
                     Login
                   </Link>
                 </li>
                 <li>
-                  <Link to="/signup" className="btn btn-primary">
+                  <Link to="/signup" className="btn btn-primary" onClick={() => setIsMenuOpen(false)}>
                     Sign Up
                   </Link>
                 </li>

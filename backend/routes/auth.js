@@ -1,25 +1,21 @@
+import express from 'express';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import User from '../models/User.js';
+import sendEmail from '../utils/sendEmail.js';
 
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
-import dotenv from "dotenv";
-import User from "../models/User.js";
-import sendEmail from "../utils/sendEmail.js";
-dotenv.config();
+const router = express.Router();
 
-
-
-
-// REGISTER
-export const registerUser = async (req, res) => {
+router.post('/register', async (req, res) => {
   const { name, email, password } = req.body;
 
   if (!name || !email || !password) {
-    return res.status(400).json({ message: "All fields required" });
+    return res.status(400).json({ message: 'All fields required' });
   }
 
   const userExists = await User.findOne({ email });
   if (userExists) {
-    return res.status(400).json({ message: "User already exists" });
+    return res.status(400).json({ message: 'User already exists' });
   }
 
   const hashedPassword = await bcrypt.hash(password, 10);
@@ -30,60 +26,51 @@ export const registerUser = async (req, res) => {
     password: hashedPassword,
   });
 
-  // Send Welcome Email
   await sendEmail({
     to: email,
-    subject: "Welcome to AlgoAI 🚀",
+    subject: 'Welcome to College Media 🚀',
     html: `
       <h2>Hello ${name} 👋</h2>
-      <p>Welcome to <b>AlgoAI</b>.</p>
-      <p>You can now start using AI tools.</p>
+      <p>Welcome to <b>College Media</b>.</p>
+      <p>You can now start connecting with your college community.</p>
       <br/>
-      <p>— Team AlgoAI</p>
+      <p>— Team College Media</p>
     `,
   });
 
   res.status(201).json({
     success: true,
-    message: "User registered & email sent",
+    message: 'User registered & email sent',
   });
-};
+});
 
-
-export const loginUser = async (req, res) => {
+router.post('/login', async (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
-    return res.status(400).json({ message: "All fields are required" });
+    return res.status(400).json({ message: 'All fields are required' });
   }
 
   try {
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(401).json({ message: "Invalid credentials" });
+      return res.status(401).json({ message: 'Invalid credentials' });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(401).json({ message: "Invalid credentials" });
+      return res.status(401).json({ message: 'Invalid credentials' });
     }
 
     const token = jwt.sign(
-      { id: user._id },
+      { userId: user._id },
       process.env.JWT_SECRET,
-      { expiresIn: "1d" }
+      { expiresIn: '1d' }
     );
-
-    
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      maxAge: 24 * 60 * 60 * 1000,
-    });
 
     res.json({
       success: true,
+      token,
       user: {
         id: user._id,
         name: user.name,
@@ -91,23 +78,8 @@ export const loginUser = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: 'Server error' });
   }
-};
+});
 
-
-export const logoutUser = (req, res) => {
-  res.clearCookie("token", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-  });
-
-  res.json({ success: true, message: "Logged out successfully" });
-};
-
-
-export const getUserProfile = async (req, res) => {
-  const user = await User.findById(req.userId).select("-password");
-  res.json({ success: true, user });
-};
+export default router;
