@@ -4,53 +4,60 @@ import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import User from "../models/User.js";
 import sendEmail from "../utils/sendEmail.js";
+import express from "express";
+
 dotenv.config();
 
+const router = express.Router();
 
 
 
 // REGISTER
-export const registerUser = async (req, res) => {
+router.post('/register', async (req, res) => {
   const { name, email, password } = req.body;
 
   if (!name || !email || !password) {
     return res.status(400).json({ message: "All fields required" });
   }
 
-  const userExists = await User.findOne({ email });
-  if (userExists) {
-    return res.status(400).json({ message: "User already exists" });
-  }
+  try {
+    const userExists = await User.findOne({ email });
+    if (userExists) {
+      return res.status(400).json({ message: "User already exists" });
+    }
 
-  const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-  const user = await User.create({
-    name,
-    email,
-    password: hashedPassword,
-  });
+    const user = await User.create({
+      name,
+      email,
+      password: hashedPassword,
+    });
 
-  // Send Welcome Email
-  await sendEmail({
-    to: email,
-    subject: "Welcome to AlgoAI 🚀",
-    html: `
+    // Send Welcome Email
+    await sendEmail({
+      to: email,
+      subject: "Welcome to AlgoAI 🚀",
+      html: `
       <h2>Hello ${name} 👋</h2>
       <p>Welcome to <b>AlgoAI</b>.</p>
       <p>You can now start using AI tools.</p>
       <br/>
       <p>— Team AlgoAI</p>
     `,
-  });
+    });
 
-  res.status(201).json({
-    success: true,
-    message: "User registered & email sent",
-  });
-};
+    res.status(201).json({
+      success: true,
+      message: "User registered & email sent",
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
 
 
-export const loginUser = async (req, res) => {
+router.post('/login', async (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
@@ -93,10 +100,10 @@ export const loginUser = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: "Server error" });
   }
-};
+});
 
 
-export const logoutUser = (req, res) => {
+router.post('/logout', (req, res) => {
   res.clearCookie("token", {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
@@ -104,10 +111,12 @@ export const logoutUser = (req, res) => {
   });
 
   res.json({ success: true, message: "Logged out successfully" });
-};
+});
 
 
-export const getUserProfile = async (req, res) => {
+router.get('/profile', async (req, res) => {
   const user = await User.findById(req.userId).select("-password");
   res.json({ success: true, user });
-};
+});
+
+export default router;
