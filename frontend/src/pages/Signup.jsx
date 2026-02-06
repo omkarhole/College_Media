@@ -7,7 +7,8 @@ export default function Signup() {
     name: '',
     email: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    role: 'student'
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -49,7 +50,8 @@ export default function Signup() {
         body: JSON.stringify({
           name: formData.name,
           email: formData.email,
-          password: formData.password
+          password: formData.password,
+          role: formData.role
         })
       });
 
@@ -94,7 +96,7 @@ export default function Signup() {
           <div className="w-8 h-8 bg-gray-900 rounded-md flex items-center justify-center">
             <span className="text-white font-bold text-lg">C</span>
           </div>
-          <span className="text-lg font-semibold text-gray-900 tracking-wide">COLLEGE MEDIA</span>
+          <span className="text-lg font-semibold text-white tracking-wide">COLLEGE MEDIA</span>
         </div>
         <Link to="/login" className="auth-cta">
           Log in
@@ -145,6 +147,25 @@ export default function Signup() {
                 placeholder="Enter your email"
                 className="auth-input"
               />
+            </div>
+
+            {/* Role Field */}
+            <div>
+              <label htmlFor="role" className="block text-sm font-semibold text-gray-700 mb-2">
+                Role
+              </label>
+              <select
+                id="role"
+                name="role"
+                required
+                value={formData.role}
+                onChange={handleChange}
+                className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-800 focus:border-transparent transition-all text-gray-900"
+              >
+                <option value="student">Student</option>
+                <option value="faculty">Faculty</option>
+                <option value="admin">Admin</option>
+              </select>
             </div>
 
             {/* Password Field */}
