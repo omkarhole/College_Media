@@ -6,11 +6,12 @@ import dotenv from "dotenv";
 import authRoutes from "./routes/auth.js";
 import postsRoutes from "./routes/posts.js";
 import chatRoutes from "./routes/chat.route.js";
+import commentsRoutes from "./routes/comments.js";
 
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3002;
 
 /* =========================
    MIDDLEWARE
@@ -32,6 +33,7 @@ mongoose
 app.use("/api/auth", authRoutes);
 app.use("/api/posts", postsRoutes);
 app.use("/api/chat", chatRoutes);
+app.use("/api/comments", commentsRoutes);
 
 /* =========================
    HEALTH CHECK

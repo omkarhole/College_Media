@@ -1,46 +1,121 @@
+import { useContext, useState, useEffect } from 'react';
 import PostCard from './PostCard';
-
-// Mock data for posts
-const mockPosts = [
-  {
-    id: 1,
-    user: {
-      name: 'John Doe',
-      title: 'Software Engineer at TechCorp',
-      avatar: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="40" height="40"%3E%3Crect fill="%234F46E5" width="40" height="40"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" fill="white" font-size="16" font-family="Arial"%3EJD%3C/text%3E%3C/svg%3E',
-    },
-    content: 'Excited to share my latest project! 🚀 Working on a new social media platform that connects developers worldwide. #Tech #Innovation',
-    timestamp: '2h ago',
-    likes: 42,
-    comments: 8,
-  },
-  {
-    id: 2,
-    user: {
-      name: 'Jane Smith',
-      title: 'Product Manager at StartupXYZ',
-      avatar: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="40" height="40"%3E%3Crect fill="%2310B981" width="40" height="40"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" fill="white" font-size="16" font-family="Arial"%3EJS%3C/text%3E%3C/svg%3E',
-    },
-    content: 'Just finished a great workshop on agile methodologies. The key takeaway: communication is everything! What are your thoughts on agile?',
-    timestamp: '4h ago',
-    likes: 28,
-    comments: 12,
-  },
-  {
-    id: 3,
-    user: {
-      name: 'Alex Johnson',
-      title: 'UX Designer at DesignStudio',
-      avatar: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="40" height="40"%3E%3Crect fill="%23F59E0B" width="40" height="40"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" fill="white" font-size="16" font-family="Arial"%3EAJ%3C/text%3E%3C/svg%3E',
-    },
-    content: 'New design trends for 2024: minimalism, accessibility, and user-centric approaches. How are you incorporating these in your projects?',
-    timestamp: '6h ago',
-    likes: 67,
-    comments: 15,
-  },
-];
+import { AuthContext } from '../../context/AuthContext';
+import { getPosts } from './posts.service';
 
 export default function SocialFeed() {
+  const { user } = useContext(AuthContext);
+  const [posts, setPosts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    fetchPosts();
+  }, []);
+
+  const fetchPosts = async () => {
+    try {
+      setLoading(true);
+      setError('');
+      const data = await getPosts(20, 0);
+      setPosts(data.posts || []);
+    } catch (err) {
+      setError('Failed to load posts. Please try again.');
+      console.error('Error fetching posts:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatTimestamp = (date) => {
+    const now = new Date();
+    const postDate = new Date(date);
+    const diffMs = now - postDate;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return postDate.toLocaleDateString();
+  };
+
+  if (loading) {
+    return (
+      <section className="w-full">
+        <div className="w-full">
+          <header style={{ padding: '1.5rem', borderBottom: '1px solid #E5E7EB' }}>
+            <h2 style={{ fontSize: '20px', fontWeight: '600', color: '#111827' }}>
+              Social Feed
+            </h2>
+          </header>
+          <div style={{ padding: '3rem', textAlign: 'center', color: '#6B7280' }}>
+            Loading posts...
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (error) {
+    return (
+      <section className="w-full">
+        <div className="w-full">
+          <header style={{ padding: '1.5rem', borderBottom: '1px solid #E5E7EB' }}>
+            <h2 style={{ fontSize: '20px', fontWeight: '600', color: '#111827' }}>
+              Social Feed
+            </h2>
+          </header>
+          <div style={{ padding: '2rem', textAlign: 'center' }}>
+            <div style={{
+              padding: '1rem',
+              backgroundColor: '#FEE2E2',
+              color: '#DC2626',
+              borderRadius: '6px',
+              fontSize: '14px',
+              marginBottom: '1rem'
+            }}>
+              {error}
+            </div>
+            <button
+              onClick={fetchPosts}
+              style={{
+                padding: '0.5rem 1rem',
+                backgroundColor: '#3B82F6',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '14px',
+                cursor: 'pointer'
+              }}
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (posts.length === 0) {
+    return (
+      <section className="w-full">
+        <div className="w-full">
+          <header style={{ padding: '1.5rem', borderBottom: '1px solid #E5E7EB' }}>
+            <h2 style={{ fontSize: '20px', fontWeight: '600', color: '#111827' }}>
+              Social Feed
+            </h2>
+          </header>
+          <div style={{ padding: '3rem', textAlign: 'center', color: '#9CA3AF' }}>
+            No posts yet. Be the first to create a post!
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="w-full">
       <div className="w-full">
@@ -53,8 +128,17 @@ export default function SocialFeed() {
 
         <div style={{ padding: '1.5rem' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {mockPosts.map((post) => (
-              <PostCard key={post.id} post={post} />
+            {posts.map((post) => (
+              <PostCard 
+                key={post._id} 
+                post={{
+                  ...post,
+                  timestamp: formatTimestamp(post.createdAt),
+                  likes: post.likes?.length || 0,
+                  comments: 0 // Will be updated by CommentSection
+                }} 
+                currentUserId={user?.id || user?._id}
+              />
             ))}
           </div>
         </div>

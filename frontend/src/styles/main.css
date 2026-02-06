@@ -70,6 +70,11 @@ nav {
   gap: 6px;
   font-size: 22px;
   font-weight: bold;
+  color: #ffffff;
+}
+
+[data-theme="light"] .logo {
+  color: #1e293b;
 }
 
 .logo-icon {
