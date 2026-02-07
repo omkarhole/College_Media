@@ -25,20 +25,27 @@ const auth = (req, res, next) => {
 router.get('/post/:postId', auth, async (req, res) => {
   try {
     const { postId } = req.params;
-    
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = parseInt(req.query.offset) || 0;
+
     // Verify post exists
     const post = await Post.findById(postId);
     if (!post) {
       return res.status(404).json({ message: 'Post not found' });
     }
 
-    // Get top-level comments (no parent)
+    // Get total count of top-level comments
+    const total = await Comment.countDocuments({ post: postId, parentComment: null });
+
+    // Get paginated top-level comments (no parent)
     const comments = await Comment.find({ 
       post: postId, 
       parentComment: null 
     })
       .populate('user', 'name email avatar')
       .sort({ createdAt: -1 })
+      .skip(offset)
+      .limit(limit)
       .lean();
 
     // Get all replies for each comment
@@ -48,7 +55,6 @@ router.get('/post/:postId', auth, async (req, res) => {
           .populate('user', 'name email avatar')
           .sort({ createdAt: 1 })
           .lean();
-        
         return {
           ...comment,
           replies,
@@ -59,7 +65,12 @@ router.get('/post/:postId', auth, async (req, res) => {
 
     res.json({
       comments: commentsWithReplies,
-      total: commentsWithReplies.length
+      pagination: {
+        total,
+        limit,
+        offset,
+        hasNext: offset + limit < total
+      }
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
