@@ -1,0 +1,54 @@
+name: "📘 Documentation Improvement"
+description: Suggest improvements or additions to project documentation
+title: "[DOCS] Improve documentation for "
+labels: ["documentation"]
+assignees: ""
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: "📌 Description"
+      description: "Clearly describe what part of the documentation needs improvement or creation."
+    validations:
+      required: true
+  - type: dropdown
+    id: affected-area
+    attributes:
+      label: "📄 Affected Area"
+      description: "Select the area of documentation that needs improvement"
+      options:
+        - README
+        - API docs
+        - Setup guide
+        - Deployment docs
+        - User guide
+        - Code comments
+        - Other (specify in description)
+    validations:
+      required: true
+  - type: textarea
+    id: expected-outcome
+    attributes:
+      label: "🎯 Expected Outcome"
+      description: "Describe what the updated documentation should include."
+    validations:
+      required: true
+  - type: checkboxes
+    id: acceptance-criteria
+    attributes:
+      label: "✅ Acceptance Criteria"
+      description: "Checklist for what the improved documentation should meet"
+      options:
+        - label: "Documentation is clear and easy to understand"
+          required: true
+        - label: "Covers all necessary details"
+          required: true
+        - label: "No broken links or missing sections"
+          required: true
+  - type: textarea
+    id: additional-notes
+    attributes:
+      label: "📝 Additional Notes"
+      description: "Add any references, examples, or screenshots if helpful."
+    validations:
+      required: false

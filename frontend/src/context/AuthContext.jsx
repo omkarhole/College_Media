@@ -1,163 +1,40 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useState, useEffect } from 'react';
 
-const AuthContext = createContext();
+export const AuthContext = createContext();
 
-// eslint-disable-next-line react-refresh/only-export-components
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
-  return context;
-};
-
-export const AuthProvider = ({ children }) => {
+export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
+  const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem("token"));
 
   useEffect(() => {
-    const storedToken = localStorage.getItem("token");
-    if (storedToken) {
-      fetchUserData(storedToken);
-    } else {
-      setLoading(false);
+    // Check if user is logged in on mount
+    const storedToken = localStorage.getItem('token');
+    const storedUser = localStorage.getItem('user');
+    
+    if (storedToken && storedUser && storedUser !== 'undefined') {
+      try {
+        setToken(storedToken);
+        setUser(JSON.parse(storedUser));
+      } catch (error) {
+        console.error('Failed to parse stored user:', error);
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      }
     }
+    setLoading(false);
   }, []);
 
-  const fetchUserData = async (token) => {
-    try {
-      setError(null);
-      const response = await fetch(
-        `${
-          import.meta.env.VITE_API_BASE_URL || "http://localhost:5001"
-        }/api/users/profile`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error("Session expired. Please login again.");
-      }
-
-      const data = await response.json();
-      setUser(data.data);
-      setToken(token);
-    } catch (err) {
-      console.error(err);
-      localStorage.removeItem("token");
-      setToken(null);
-      setUser(null);
-
-      if (!navigator.onLine) {
-        setError("No internet connection. Please check your network.");
-      } else {
-        setError(err.message || "Failed to load user data.");
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const login = async (email, password) => {
-    try {
-      const response = await fetch(
-        `${
-          import.meta.env.VITE_API_BASE_URL || "http://localhost:5001"
-        }/api/v1/auth/login`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (data.success) {
-        // Backend now sends token at root level, user data in data object
-        const { token, data: userData } = data;
-        localStorage.setItem("token", token);
-        setToken(token);
-        setUser(userData);
-        setError(null);
-        return { success: true, user: userData };
-      } else {
-        return { success: false, message: data.message };
-      }
-    } catch {
-      return {
-        success: false,
-        message: !navigator.onLine
-          ? "No internet connection."
-          : "Login failed. Please try again.",
-      };
-    }
-  };
-
-  const resetPassword = async (email) => {
-    try {
-      // Mock password reset - replace with actual implementation
-      console.log("Password reset requested for:", email);
-      return Promise.resolve();
-    } catch {
-      throw new Error("Password reset failed");
-    }
-  };
-
-  const register = async (formData) => {
-    try {
-      const API_BASE_URL =
-        import.meta.env.VITE_API_BASE_URL || "http://localhost:5001";
-
-      const response = await fetch(`${API_BASE_URL}/api/v1/auth/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
-
-      let data;
-      try {
-        data = await response.json();
-      } catch {
-        throw new Error(
-          "Server returned an invalid response. Please try again later."
-        );
-      }
-
-      if (data.success) {
-        // Backend now sends token at root level, user data in data object
-        const { token, data: userData } = data;
-
-        localStorage.setItem("token", token);
-        setToken(token);
-        setUser(userData);
-        setError(null);
-
-        return { success: true, user: userData };
-      } else {
-        return {
-          success: false,
-          message: data.message || "Registration failed.",
-        };
-      }
-    } catch (err) {
-      console.error("Registration Error:", err);
-
-      return {
-        success: false,
-        message: !navigator.onLine
-          ? "No internet connection."
-          : err.message ||
-            "Registration failed. Please check your server connection.",
-      };
-    }
+  const login = (newToken, newUser) => {
+    localStorage.setItem('token', newToken);
+    localStorage.setItem('user', JSON.stringify(newUser));
+    setToken(newToken);
+    setUser(newUser);
   };
 
   const logout = () => {
-    localStorage.removeItem("token");
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
     setToken(null);
     setUser(null);
   };
@@ -165,32 +42,15 @@ export const AuthProvider = ({ children }) => {
   const value = {
     user,
     token,
-    login,
-    register,
-    resetPassword,
-    logout,
     loading,
-    error,
-    setError,
+    login,
+    logout,
+    isAuthenticated: !!token
   };
 
   return (
     <AuthContext.Provider value={value}>
-      {error && (
-        <div
-          style={{
-            background: "#fee",
-            color: "#900",
-            padding: "12px",
-            margin: "10px",
-            borderRadius: "6px",
-            textAlign: "center",
-          }}
-        >
-          ⚠️ {error}
-        </div>
-      )}
-      {!loading && !error && children}
+      {!loading && children}
     </AuthContext.Provider>
   );
-};
+}

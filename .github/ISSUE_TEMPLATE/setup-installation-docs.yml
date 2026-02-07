@@ -1,0 +1,79 @@
+name: "⚙️ Setup & Installation Docs"
+description: Improve or add local development setup documentation
+title: "[SETUP DOCS] Improve setup guide for "
+labels: ["documentation", "good first issue"]
+assignees: ""
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: "🛠️ Problem"
+      description: "Describe what is confusing or missing in the setup process."
+      placeholder: "What specific part of the setup process is unclear or causing issues?"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: "💻 Operating System"
+      description: "What operating system are you using?"
+      options:
+        - Windows
+        - macOS
+        - Linux (Ubuntu)
+        - Linux (CentOS/RHEL)
+        - Linux (Other)
+        - Other (specify in description)
+    validations:
+      required: true
+  - type: input
+    id: node-version
+    attributes:
+      label: "Node.js Version"
+      description: "What version of Node.js are you using?"
+      placeholder: "e.g., v18.17.0"
+    validations:
+      required: false
+  - type: dropdown
+    id: database
+    attributes:
+      label: "Database"
+      description: "What database setup are you using?"
+      options:
+        - MongoDB Atlas (Cloud)
+        - Local MongoDB
+        - Docker MongoDB
+        - Other (specify in description)
+    validations:
+      required: false
+  - type: textarea
+    id: proposed-changes
+    attributes:
+      label: "📘 Proposed Documentation Changes"
+      description: "Explain what steps or explanations should be added to improve the setup guide."
+      placeholder: "Describe the specific improvements needed..."
+    validations:
+      required: true
+  - type: checkboxes
+    id: acceptance-criteria
+    attributes:
+      label: "✅ Acceptance Criteria"
+      description: "What should the improved documentation accomplish?"
+      options:
+        - label: "Clear step-by-step instructions"
+          required: true
+        - label: "Covers common errors and troubleshooting"
+          required: true
+        - label: "Works for a fresh clone of the repo"
+          required: true
+        - label: "Includes prerequisites and system requirements"
+          required: false
+        - label: "Provides alternative setup methods (Docker, etc.)"
+          required: false
+  - type: textarea
+    id: additional-notes
+    attributes:
+      label: "📝 Additional Notes"
+      description: "Any additional context, error messages, or screenshots"
+    validations:
+      required: false

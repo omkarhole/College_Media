@@ -1,46 +1,35 @@
-import { useTheme } from "../context/ThemeContext";
-import { FiSun, FiMoon } from "react-icons/fi";
+import { useContext } from 'react';
+import { ThemeContext } from '../context/ThemeContext';
 
-const ThemeToggle = ({ className = "" }) => {
-  const { isDarkMode, toggleTheme } = useTheme();
+export default function ThemeToggle() {
+  const { theme, toggleTheme } = useContext(ThemeContext);
 
   return (
     <button
       onClick={toggleTheme}
-      className={`
-        relative p-2 rounded-full transition-all duration-300 ease-in-out
-        hover:bg-coral-50 dark:hover:bg-slate-800
-        focus:outline-none focus:ring-2 focus:ring-coral-500/50
-        ${className}
-      `}
-      aria-label={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
-      title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
+      title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+      style={{
+        background: 'var(--color-bg-tertiary)',
+        border: '1px solid var(--color-border-primary)',
+        borderRadius: '8px',
+        padding: '0.5rem 0.75rem',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: '18px',
+        transition: 'all var(--transition-base)',
+        width: '40px',
+        height: '40px'
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.backgroundColor = 'var(--color-hover-bg)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.backgroundColor = 'var(--color-bg-tertiary)';
+      }}
     >
-      <div className="relative w-5 h-5">
-        {/* Sun Icon (Show when Light) */}
-        <div
-          className={`absolute inset-0 transform transition-all duration-500 ${
-            isDarkMode
-              ? "rotate-90 opacity-0 scale-50"
-              : "rotate-0 opacity-100 scale-100"
-          }`}
-        >
-          <FiSun className="w-5 h-5 text-amber-500 hover:text-amber-600 transition-colors" />
-        </div>
-
-        {/* Moon Icon (Show when Dark) */}
-        <div
-          className={`absolute inset-0 transform transition-all duration-500 ${
-            isDarkMode
-              ? "rotate-0 opacity-100 scale-100"
-              : "-rotate-90 opacity-0 scale-50"
-          }`}
-        >
-          <FiMoon className="w-5 h-5 text-indigo-400 hover:text-indigo-300 transition-colors" />
-        </div>
-      </div>
+      {theme === 'light' ? '🌙' : '☀️'}
     </button>
   );
-};
-
-export default ThemeToggle;
+}

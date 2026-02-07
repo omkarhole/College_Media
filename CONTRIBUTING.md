@@ -1,63 +1,346 @@
-# CONTRIBUTING TO COLLEGE MEDIA 🎓 - CONTAIN LISTED BELOW !!
-Thank you for your interest in contributing! To maintain code quality and project integrity, please follow these guidelines.
+# Contributing to College Media
 
-## 🛠️ DEVELOPMENT STANDARDS
-Framework: Built using React 19.
+Thank you for your interest in contributing to College Media! This document provides guidelines and information for contributors. Following these guidelines helps ensure a smooth collaboration and maintains code quality.
 
-Styling: Use Tailwind CSS for all new components.
+## Table of Contents
 
-Naming Conventions:
+- [Contributing to College Media](#contributing-to-college-media)
+  - [Table of Contents](#table-of-contents)
+  - [Getting Started](#getting-started)
+    - [Prerequisites](#prerequisites)
+    - [Development Setup](#development-setup)
+  - [Development Workflow](#development-workflow)
+  - [ECWoC’26 Contribution Guidelines](#ecwoc26-contribution-guidelines)
+  - [Branch Naming Conventions](#branch-naming-conventions)
+    - [Branch Types](#branch-types)
+    - [Examples](#examples)
+  - [Commit Message Conventions](#commit-message-conventions)
+    - [Commit Types](#commit-types)
+    - [Scope (Optional)](#scope-optional)
+    - [Examples](#examples-1)
+    - [Guidelines](#guidelines)
+  - [Pull Request Process](#pull-request-process)
+    - [Creating a Pull Request](#creating-a-pull-request)
+    - [PR Template](#pr-template)
+    - [Review Process](#review-process)
+    - [Review Guidelines](#review-guidelines)
+  - [Code Style Guidelines](#code-style-guidelines)
+    - [Linting](#linting)
+  - [Testing](#testing)
+    - [Frontend Testing](#frontend-testing)
+    - [Backend Testing](#backend-testing)
+    - [Manual Testing Checklist](#manual-testing-checklist)
+  - [Reporting Issues](#reporting-issues)
+    - [Bug Reports](#bug-reports)
+    - [Feature Requests](#feature-requests)
+  - [Code of Conduct](#code-of-conduct)
 
-PascalCase for React components (e.g., PostCard.jsx).
+## Getting Started
 
-camelCase for variables and functions.
+### Prerequisites
 
-Linting: You must run npm run lint and fix all warnings before committing.
+Before contributing, ensure you have:
 
-## 🚦 WORKFLOW
+- Node.js (v18 or higher)
+- MongoDB (local installation or MongoDB Atlas)
+- Git
+- A GitHub account
 
-Fork & Clone: Fork the repository and clone it to your local machine.
+### Development Setup
 
-Branching: Create a descriptive feature branch: git checkout -b feature/your-feature-name.
+1. **Fork the repository** on GitHub
+2. **Clone your fork**:
+   ```bash
+   git clone https://github.com/YOUR_USERNAME/College_Media.git
+   cd College_Media
+   ```
+3. **Set up upstream remote**:
+   ```bash
+   git remote add upstream https://github.com/Ewocs/College_Media.git
+   ```
+4. **Install dependencies**:
+   ```bash
+   # Backend dependencies
+   cd backend
+   npm install
 
-Environment: Copy .env.example to .env before starting development.
+   # Frontend dependencies
+   cd ../frontend
+   npm install
 
-Pull Request: Submit your PR against the main branch using the required PR template.
+   # Return to root
+   cd ..
+   ```
+5. **Set up environment variables**:
+   ```bash
+   cp backend/.env.example backend/.env
+   # Edit backend/.env with your configuration
+   ```
+6. **Start the development servers**:
+   ```bash
+   # Terminal 1: Start backend
+   cd backend
+   npm run dev
 
-## 📝 COMMIT MESSAGES
+   # Terminal 2: Start frontend
+   cd frontend
+   npm run dev
+   ```
 
-We follow the type(scope): subject format:
+## Development Workflow
 
-feat: A new feature
+1. **Choose an issue** from the [GitHub Issues](https://github.com/Ewocs/College_Media/issues) or create one
+2. **Create a feature branch** from `main`
+3. **Make your changes** following the code style guidelines
+4. **Test your changes** thoroughly
+5. **Commit your changes** with descriptive messages
+6. **Push your branch** and create a pull request
+7. **Address review feedback** and make necessary changes
+8. **Merge** once approved
 
-fix: A bug fix
+ ## ECWoC’26 Contribution Guidelines
+1.  **Issue labeling**: Use `enhancement`, `bug`, `documentation`, or `feature-request`.
+2.  **PR submission**: Reference the issue number in your PR.
+3.  **Review deadlines**: Ensure PRs are submitted at least 24 hours before the milestone deadline.
+4.  **Code quality**: Maintain all code style, linting, and testing requirements.
+5.  **Acknowledgment**: All accepted contributions will be credited in the project README and event dashboard.
 
-docs: Documentation changes
 
-refactor: Code changes that neither fix a bug nor add a feature
+## Branch Naming Conventions
 
-## 🚫 COMMUNITY GUIDELINES & MORALE
+Use descriptive, lowercase branch names with hyphens. Follow this pattern:
 
-No Negative Comments: Comments on assigned issues that decrease morale or discourage other contributors are strictly prohibited.
-Respect Assignment: Wait for an issue to be officially assigned to you before starting work or submitting a PR. Unsolicited PRs for unassigned issues will be closed.
+```
+<type>/<description>
+```
 
-## 📸 VISUAL REQUIREMENTS (MANDATORY)
+### Branch Types
 
-Screenshots of Changes: You MUST provide screenshots or GIFs of the new changes in your PR.
-Screenshots of the Area to be Changed: You MUST provide screenshots of the current state when opening an Issue.
+- `feature/` - New features or enhancements
+- `bugfix/` - Bug fixes
+- `hotfix/` - Critical fixes for production
+- `docs/` - Documentation updates
+- `refactor/` - Code refactoring without changing functionality
+- `test/` - Adding or updating tests
+- `chore/` - Maintenance tasks, dependencies, etc.
 
-# ⏱️ TIME CONSTRAINTS & DISQUALIFICATION
+### Examples
 
-Assignment Window: Once assigned, work must begin immediately.
+```
+feature/user-authentication
+bugfix/login-validation
+docs/api-documentation
+refactor/user-service
+test/auth-middleware
+chore/update-dependencies
+```
 
-Max Limit: Contributors can ask for Maximum 3 Issues in a day, More only if the assigned Ones are done
+## Commit Message Conventions
 
-Standard Deadline: Tasks should ideally be completed within 30 minutes to 48 hours.
+Write clear, descriptive commit messages that explain what was changed and why. Follow this format:
 
-Maximum Grace Period: If no progress is shown after 72 hours, the issue will be unassigned and given to another contributor.
+```
+<type>(<scope>): <description>
 
-Code Quality Disqualification: Submitting a PR that fails the build, ignores linting rules, or lacks the mandatory screenshots will result in immediate disqualification from the issue.
+[optional body]
 
-Duplicate Submissions: Submitting a PR for an issue already assigned to someone else is grounds for a warning or ban from the project.
+[optional footer]
+```
 
-Stale PRs: If a contributor fails to respond to requested changes within 24 hours, the PR may be closed.
+### Commit Types
+
+- `feat` - New features
+- `fix` - Bug fixes
+- `docs` - Documentation changes
+- `style` - Code style changes (formatting, etc.)
+- `refactor` - Code refactoring
+- `test` - Adding or updating tests
+- `chore` - Maintenance tasks
+
+### Scope (Optional)
+
+Specify the part of the codebase affected:
+- `frontend`, `backend`
+- Component or file names
+- `auth`, `posts`, `chatbot`
+
+### Examples
+
+```
+feat(auth): add JWT token refresh functionality
+
+fix(frontend): resolve login form validation error
+
+docs: update API documentation for posts endpoint
+
+refactor(backend): simplify user authentication middleware
+
+test: add unit tests for post service
+
+chore: update Node.js dependencies
+```
+
+### Guidelines
+
+- Use present tense ("add" not "added")
+- Keep the subject line under 50 characters
+- Use the body for detailed explanations if needed
+- Reference issue numbers when applicable: `fix: resolve login issue #123`
+
+## Pull Request Process
+
+### Creating a Pull Request
+
+1. **Ensure your branch is up to date**:
+   ```bash
+   git checkout main
+   git pull upstream main
+   git checkout your-branch
+   git rebase main
+   ```
+
+2. **Push your branch** to your fork:
+   ```bash
+   git push origin your-branch
+   ```
+
+3. **Create a PR** on GitHub:
+   - Use a descriptive title
+   - Fill out the PR template
+   - Link related issues
+   - Add screenshots for UI changes
+
+### PR Template
+
+```
+## Description
+Brief description of the changes made.
+
+## Type of Change
+- [ ] Bug fix
+- [ ] New feature
+- [ ] Breaking change
+- [ ] Documentation update
+- [ ] Code refactoring
+
+## Testing
+- [ ] Unit tests added/updated
+- [ ] Manual testing completed
+- [ ] All tests pass
+
+## Screenshots (if applicable)
+Add screenshots of UI changes.
+
+## Checklist
+- [ ] Code follows style guidelines
+- [ ] Commit messages are descriptive
+- [ ] Documentation updated if needed
+- [ ] Tests added for new functionality
+```
+
+### Review Process
+
+1. **Automated Checks**: Ensure all CI checks pass
+2. **Code Review**: At least one maintainer review is required
+3. **Testing**: Reviewers may request additional tests
+4. **Approval**: PR is merged once approved and all checks pass
+
+### Review Guidelines
+
+**For Reviewers:**
+- Check code quality and adherence to style guidelines
+- Verify tests are adequate
+- Test the functionality manually
+- Suggest improvements constructively
+- Approve when requirements are met
+
+**For Contributors:**
+- Address all review comments
+- Make requested changes
+- Keep the PR updated with main branch
+- Be responsive to feedback
+
+## Code Style Guidelines
+
+Follow the established code style defined in [CODE_STYLE.md](./CODE_STYLE.md). Key points:
+
+- Use 2 spaces for indentation
+- Follow naming conventions (camelCase, PascalCase, UPPER_CASE)
+- Limit lines to 100 characters
+- Use semicolons consistently
+- Follow React and Node.js best practices
+
+### Linting
+
+Run linters before committing:
+
+```bash
+# Frontend
+cd frontend
+npm run lint
+
+# Backend
+cd backend
+npm run lint
+```
+
+## Testing
+
+### Frontend Testing
+
+```bash
+cd frontend
+npm run test
+```
+
+### Backend Testing
+
+```bash
+cd backend
+npm run test
+```
+
+### Manual Testing Checklist
+
+- [ ] User registration and login work
+- [ ] Post creation, viewing, and interaction work
+- [ ] Chatbot responds appropriately
+- [ ] Responsive design works on mobile/desktop
+- [ ] No console errors in browser
+- [ ] API endpoints return correct responses
+
+## Reporting Issues
+
+### Bug Reports
+
+Use the bug report template and include:
+
+- Clear title describing the issue
+- Steps to reproduce
+- Expected vs. actual behavior
+- Browser/OS information
+- Screenshots if applicable
+- Console errors/logs
+
+### Feature Requests
+
+Use the feature request template and include:
+
+- Clear description of the proposed feature
+- Use case and benefits
+- Mockups or examples if applicable
+- Implementation suggestions
+
+## Code of Conduct
+
+This project follows a code of conduct to ensure a welcoming environment for all contributors. By participating, you agree to:
+
+- Be respectful and inclusive
+- Focus on constructive feedback
+- Accept responsibility for mistakes
+- Show empathy towards other contributors
+- Help create a positive community
+
+---
+
+Thank you for contributing to College Media! Your efforts help make this platform better for college students everywhere. 🚀

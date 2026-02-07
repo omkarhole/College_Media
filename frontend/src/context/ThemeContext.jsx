@@ -1,65 +1,34 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useState, useEffect } from 'react';
 
-const ThemeContext = createContext();
+export const ThemeContext = createContext();
 
-export const ThemeProvider = ({ children }) => {
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    // 1. Check localStorage first
-    const savedTheme = localStorage.getItem("theme");
-    if (savedTheme) {
-      return savedTheme === "dark";
-    }
+export function ThemeProvider({ children }) {
+  const [theme, setTheme] = useState('light');
+  const [mounted, setMounted] = useState(false);
 
-    // 2. Fallback to System Preference
-    if (typeof window !== "undefined" && window.matchMedia) {
-      return window.matchMedia("(prefers-color-scheme: dark)").matches;
-    }
-
-    // 3. Default to light
-    return false;
-  });
-
+  // Load theme from localStorage on mount
   useEffect(() => {
-    const htmlElement = document.documentElement;
-
-    if (isDarkMode) {
-      htmlElement.classList.add("dark");
-      localStorage.setItem("theme", "dark");
-    } else {
-      htmlElement.classList.remove("dark");
-      localStorage.setItem("theme", "light");
-    }
-  }, [isDarkMode]);
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-
-    const handleChange = (e) => {
-      if (!localStorage.getItem("theme")) {
-        setIsDarkMode(e.matches);
-      }
-    };
-
-    mediaQuery.addEventListener("change", handleChange);
-    return () => mediaQuery.removeEventListener("change", handleChange);
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    setTheme(savedTheme);
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    setMounted(true);
   }, []);
 
   const toggleTheme = () => {
-    setIsDarkMode((prev) => !prev);
+    const newTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(newTheme);
+    localStorage.setItem('theme', newTheme);
+    document.documentElement.setAttribute('data-theme', newTheme);
   };
 
+  // Prevent flash of unstyled content
+  if (!mounted) {
+    return null;
+  }
+
   return (
-    <ThemeContext.Provider value={{ isDarkMode, toggleTheme }}>
+    <ThemeContext.Provider value={{ theme, toggleTheme }}>
       {children}
     </ThemeContext.Provider>
   );
-};
-
-// eslint-disable-next-line react-refresh/only-export-components
-export const useTheme = () => {
-  const context = useContext(ThemeContext);
-  if (!context) {
-    throw new Error("useTheme must be used within a ThemeProvider");
-  }
-  return context;
-};
+}

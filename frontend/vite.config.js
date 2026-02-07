@@ -1,7 +1,6 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import compression from "vite-plugin-compression";
-import { visualizer } from "rollup-plugin-visualizer";
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -13,25 +12,10 @@ export default defineConfig({
         plugins: []
       }
     }),
-    // Gzip compression
-    compression({
-      algorithm: "gzip",
-      ext: ".gz",
-    }),
-    // Brotli compression
-    compression({
-      algorithm: "brotliCompress",
-      ext: ".br",
-    }),
-    // Bundle analyzer (only in analyze mode)
-    visualizer({
-      open: process.env.ANALYZE === "true",
-      filename: "dist/stats.html",
-      gzipSize: true,
-      brotliSize: true,
-    }),
+    tailwindcss()
   ],
   server: {
+    port: 3000,
     // Suppress non-critical warnings from third-party packages
     hmr: {
       overlay: true
