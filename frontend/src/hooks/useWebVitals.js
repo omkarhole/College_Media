@@ -10,9 +10,9 @@ export const useWebVitals = (callback) => {
     if (typeof window === 'undefined') return;
 
     // Dynamic import web-vitals only when needed
-    import('web-vitals').then(({ onCLS, onFID, onFCP, onLCP, onTTFB }) => {
+    import('web-vitals').then(({ onCLS, onINP, onFCP, onLCP, onTTFB }) => {
       onCLS(callback);
-      onFID(callback);
+      onINP(callback); // INP replaced FID in web-vitals v3+
       onFCP(callback);
       onLCP(callback);
       onTTFB(callback);

@@ -6,7 +6,13 @@ import { visualizer } from "rollup-plugin-visualizer";
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
-    react(),
+    react({
+      jsxRuntime: 'automatic',
+      jsxImportSource: undefined,
+      babel: {
+        plugins: []
+      }
+    }),
     // Gzip compression
     compression({
       algorithm: "gzip",
@@ -25,6 +31,12 @@ export default defineConfig({
       brotliSize: true,
     }),
   ],
+  server: {
+    // Suppress non-critical warnings from third-party packages
+    hmr: {
+      overlay: true
+    }
+  },
   base: process.env.NODE_ENV === "production" ? "/College_Media/" : "/",
   build: {
     // Code splitting optimization
