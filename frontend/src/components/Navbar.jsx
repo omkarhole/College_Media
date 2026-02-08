@@ -13,6 +13,7 @@ export default function Navbar() {
 import { ThemeContext } from '../context/ThemeContext';
 import { FaBars, FaTimes } from 'react-icons/fa';
 import ThemeToggle from './ThemeToggle';
+import NotificationBell from './NotificationBell';
 
 export default function Navbar() {
   const { user, isAuthenticated, logout } = useContext(AuthContext);
@@ -301,15 +302,7 @@ export default function Navbar() {
             )}
 
           </ul>
-
-          {/* Hamburger */}
-          <button
-            className="md:hidden text-3xl"
-            onClick={() => setMobileMenuOpen(true)}
-            aria-label="Open menu"
-          >
-            <MenuIcon />
-          </button>
+          <NotificationBell />
         </div>
       </nav>
 
