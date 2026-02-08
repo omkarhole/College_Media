@@ -4,6 +4,7 @@ import Post from "../models/Post.js";
 //scgeck
 import multer from "multer";
 import path from "path";
+import { requireRoles } from "../middleware/roleMiddleware.js";
 
 const router = express.Router();
 
@@ -53,7 +54,7 @@ router.get("/:id", async (req, res) => {
 });
 
 // PATCH /api/users/:id/avatar - Upload/update profile picture
-router.patch("/:id/avatar", upload.single("avatar"), async (req, res) => {
+router.patch("/:id/avatar", requireRoles(["admin", "moderator"]), upload.single("avatar"), async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: "User not found" });
