@@ -1,6 +1,7 @@
 import { useContext, useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+
 import { Menu as MenuIcon, Close as CloseIcon } from '@mui/icons-material';
 
 export default function Navbar() {
@@ -8,7 +9,21 @@ export default function Navbar() {
   const [theme, setTheme] = useState('light');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+
+import { ThemeContext } from '../context/ThemeContext';
+import { FaBars, FaTimes } from 'react-icons/fa';
+import ThemeToggle from './ThemeToggle';
+import NotificationBell from './NotificationBell';
+
+export default function Navbar() {
+  const { user, isAuthenticated, logout } = useContext(AuthContext);
+  const { theme } = useContext(ThemeContext);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
   const navigate = useNavigate();
+  const location = useLocation();
+
 
   const links = [
     { label: 'Features', to: '#features' },
@@ -16,7 +31,6 @@ export default function Navbar() {
     { label: 'Team', to: '#team' },
   ];
 
-  // Theme setup
   useEffect(() => {
     const stored = localStorage.getItem('theme');
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -26,7 +40,7 @@ export default function Navbar() {
     document.body.classList.add(initial);
   }, []);
 
-  // Lock scroll + clicks when mobile menu open
+ 
   useEffect(() => {
     if (mobileMenuOpen) {
       document.body.style.overflow = 'hidden';
@@ -45,11 +59,30 @@ export default function Navbar() {
     localStorage.setItem('theme', next);
   };
 
+
+  useEffect(() => {
+    setIsMenuOpen(false);
+    setShowDropdown(false);
+  }, [location]);
+
+
+  useEffect(() => {
+    if (isMenuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+  }, [isMenuOpen]);
+
+
   const handleLogout = () => {
     logout();
     navigate('/');
+
     setDropdownOpen(false);
     setMobileMenuOpen(false);
+    setShowDropdown(false);
+
   };
 
   const NavLinks = ({ mobile = false }) =>
@@ -71,6 +104,7 @@ export default function Navbar() {
         </li>
       )
     );
+
 
   const AuthButtons = ({ mobile = false }) => {
     if (isAuthenticated) {
@@ -136,6 +170,34 @@ export default function Navbar() {
     );
   };
 
+  const [showAvatarModal, setShowAvatarModal] = useState(false);
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const handleAvatarClick = () => {
+    setShowAvatarModal(true);
+  };
+  const handleAvatarUpload = async () => {
+    if (!avatarFile || !user?._id) return;
+    setUploading(true);
+    const formData = new FormData();
+    formData.append("avatar", avatarFile);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`http://localhost:3002/api/users/${user._id}/avatar`, {
+        method: "PATCH",
+        headers: {
+          "Authorization": `Bearer ${token}`
+        },
+        body: formData
+      });
+      if (res.ok) {
+        setShowAvatarModal(false);
+        window.location.reload();
+      }
+    } catch {}
+    setUploading(false);
+  };
   return (
     <>
       {/* NAVBAR */}
@@ -157,16 +219,153 @@ export default function Navbar() {
             </li>
             <NavLinks />
             <AuthButtons />
-          </ul>
 
-          {/* Hamburger */}
-          <button
-            className="md:hidden text-3xl"
-            onClick={() => setMobileMenuOpen(true)}
-            aria-label="Open menu"
-          >
-            <MenuIcon />
-          </button>
+        {/* Mobile Menu Button */}
+        <button
+          className="mobile-menu-btn"
+          onClick={() => setIsMenuOpen(!isMenuOpen)}
+          aria-label="Toggle menu"
+        >
+          {isMenuOpen ? <FaTimes /> : <FaBars />}
+        </button>
+
+        {/* Overlay */}
+        <div
+          className={`nav-overlay ${isMenuOpen ? 'active' : ''}`}
+          onClick={() => setIsMenuOpen(false)}
+        />
+
+        <div className={`nav-links ${isMenuOpen ? 'active' : ''}`}>
+          {isMenuOpen && (
+            <button
+              className="close-menu"
+              onClick={() => setIsMenuOpen(false)}
+            >
+              <FaTimes />
+            </button>
+          )}
+
+          <ul>
+            <li>
+              <ThemeToggle />
+            </li>
+            <li><a href="#features" onClick={() => setIsMenuOpen(false)}>Features</a></li>
+            <li><a href="#about" onClick={() => setIsMenuOpen(false)}>About</a></li>
+            <li><a href="#team" onClick={() => setIsMenuOpen(false)}>Team</a></li>
+            <li>
+              <Link to="/sample-profile" onClick={() => setIsMenuOpen(false)} style={{ fontWeight: 500, color: '#1976d2' }}>
+                Sample Profile
+              </Link>
+            </li>
+            {isAuthenticated ? (
+              <li style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ cursor: 'pointer' }} onClick={handleAvatarClick}>
+                  {user?.avatar ? (
+                    <img src={`http://localhost:3002${user.avatar}`} alt="Avatar" style={{ width: 32, height: 32, borderRadius: '50%' }} />
+                  ) : (
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#e0e7ef', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: 18, color: '#1976d2' }}>
+                      {user?.name ? user.name[0] : 'A'}
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={() => setShowDropdown(!showDropdown)}
+                  className="btn btn-primary"
+                  style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                >
+                  {user?.name || 'User'} ▼
+                </button>
+                {showDropdown && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '100%',
+                    right: 0,
+                    marginTop: '0.5rem',
+                    backgroundColor: theme === 'dark' ? '#1e293b' : 'white',
+                    borderRadius: '0.5rem',
+                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                    minWidth: '160px',
+                    zIndex: 1000,
+                    overflow: 'hidden'
+                  }}>
+                    <Link
+                      to={user && user._id ? `/profile/${user._id}` : '#'}
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem 1rem',
+                        display: 'block',
+                        textAlign: 'left',
+                        border: 'none',
+                        background: 'none',
+                        cursor: 'pointer',
+                        color: theme === 'dark' ? '#fff' : '#1e293b',
+                        fontWeight: '500',
+                        textDecoration: 'none'
+                      }}
+                      onClick={() => setShowDropdown(false)}
+                      onMouseEnter={e => e.target.style.backgroundColor = theme === 'dark' ? '#334155' : '#f3f4f6'}
+                      onMouseLeave={e => e.target.style.backgroundColor = 'transparent'}
+                    >
+                      My Profile
+                    </Link>
+                    <button
+                      onClick={handleLogout}
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem 1rem',
+                        textAlign: 'left',
+                        border: 'none',
+                        background: 'none',
+                        cursor: 'pointer',
+                        color: '#ef4444',
+                        fontWeight: '500'
+                      }}
+                      onMouseEnter={(e) => e.target.style.backgroundColor = theme === 'dark' ? '#334155' : '#f3f4f6'}
+                      onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                    >
+                      Logout
+                    </button>
+                  </div>
+                )}
+                {/* Avatar upload modal */}
+                {showAvatarModal && (
+                  <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.2)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ background: '#fff', padding: '2rem', borderRadius: '1rem', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', minWidth: 320 }}>
+                      <h3>Update Profile Picture</h3>
+                      <input type="file" accept="image/*" onChange={e => {
+                        const file = e.target.files[0];
+                        setAvatarFile(file);
+                        if (file) setAvatarPreview(URL.createObjectURL(file));
+                        else setAvatarPreview("");
+                      }} />
+                      {avatarPreview && (
+                        <img src={avatarPreview} alt="Preview" style={{ width: 80, height: 80, borderRadius: '50%', margin: '1rem 0' }} />
+                      )}
+                      <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                        <button className="btn btn-primary" disabled={uploading} onClick={handleAvatarUpload}>Upload</button>
+                        <button className="btn" onClick={() => setShowAvatarModal(false)}>Cancel</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </li>
+            ) : (
+              <>
+                <li>
+                  <Link to="/login" className="login-link" onClick={() => setIsMenuOpen(false)}>
+                    Login
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/signup" className="btn btn-primary" onClick={() => setIsMenuOpen(false)}>
+                    Sign Up
+                  </Link>
+                </li>
+              </>
+            )}
+
+          </ul>
+          <NotificationBell />
         </div>
       </nav>
 
