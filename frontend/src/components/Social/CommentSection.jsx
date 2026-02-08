@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import CommentForm from './CommentForm';
 import CommentItem from './CommentItem';
 import { getComments, createComment, updateComment, replyToComment } from './comments.service';
+import ErrorMessage from '../ErrorMessage';
 
 export default function CommentSection({ postId, initialCount = 0, currentUserId, onCommentCountChange }) {
   const [comments, setComments] = useState([]);
@@ -162,15 +163,8 @@ export default function CommentSection({ postId, initialCount = 0, currentUserId
 
   if (error) {
     return (
-      <div style={{
-        padding: '1rem',
-        backgroundColor: '#FEE2E2',
-        color: '#DC2626',
-        borderRadius: '6px',
-        fontSize: '14px',
-        textAlign: 'center'
-      }}>
-        {error}
+      <div>
+        <ErrorMessage message={error} visible={!!error} />
         <button
           onClick={fetchComments}
           style={{

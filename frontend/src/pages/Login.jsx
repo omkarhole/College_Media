@@ -3,6 +3,7 @@ import { toast } from 'react-toastify';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import '../components/Navbar';
+import ErrorMessage from '../components/ErrorMessage';
 export default function Login() {
     const [showResetModal, setShowResetModal] = useState(false);
     const [resetEmail, setResetEmail] = useState('');
@@ -95,11 +96,7 @@ export default function Login() {
         <div className="auth-card w-full max-w-md p-10">
           <h1 className="auth-title text-3xl font-bold mb-10">Log in</h1>
 
-          {error && (
-            <div className="auth-error">
-              {error}
-            </div>
-          )}
+          <ErrorMessage message={error} visible={!!error} />
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Email Field */}

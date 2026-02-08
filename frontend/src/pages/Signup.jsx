@@ -2,6 +2,7 @@ import { useState, useContext } from 'react';
 import { toast } from 'react-toastify';
 import { Link, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+import ErrorMessage from '../components/ErrorMessage';
 
 export default function Signup() {
   const [formData, setFormData] = useState({
@@ -98,6 +99,7 @@ export default function Signup() {
     <div className="auth-page min-h-screen flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-6 lg:px-12 py-6">
+        <ErrorMessage message={error} visible={!!error} />
         <div className="flex items-center space-x-2">
           <div className="w-8 h-8 bg-gray-900 rounded-md flex items-center justify-center">
             <span className="text-white font-bold text-lg">C</span>

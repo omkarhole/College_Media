@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import ErrorMessage from '../ErrorMessage';
 
 export default function CommentForm({ onSubmit, placeholder = "Write a comment...", buttonText = "Comment", autoFocus = false }) {
   const [text, setText] = useState('');
@@ -91,17 +92,7 @@ export default function CommentForm({ onSubmit, placeholder = "Write a comment..
         </div>
       </div>
       {error && (
-        <div style={{
-          marginTop: '0.5rem',
-          padding: '0.5rem',
-          backgroundColor: 'var(--color-error-light)',
-          color: 'var(--color-error)',
-          borderRadius: '6px',
-          fontSize: '13px',
-          border: '1px solid var(--color-error)'
-        }}>
-          {error}
-        </div>
+        <ErrorMessage message={error} visible={!!error} />
       )}
     </form>
   );
