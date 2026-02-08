@@ -11,10 +11,10 @@ const router = express.Router();
 router.get("/by-username/:username", async (req, res) => {
   try {
     const user = await User.findOne({ username: req.params.username }).select("-password");
-    if (!user) return res.status(404).json({ message: "User not found" });
-    res.json(user);
+    if (!user) return res.status(404).json({ error: true, code: "USER_NOT_FOUND", message: "User not found" });
+    res.json({ error: false, data: user });
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({ error: true, code: "SERVER_ERROR", message: "Server error", details: error.message });
   }
 });
 
@@ -44,11 +44,11 @@ const upload = multer({
 router.get("/:id", async (req, res) => {
   try {
     const user = await User.findById(req.params.id).select("-password");
-    if (!user) return res.status(404).json({ message: "User not found" });
+    if (!user) return res.status(404).json({ error: true, code: "USER_NOT_FOUND", message: "User not found" });
     const posts = await Post.find({ user: req.params.id }).sort({ createdAt: -1 });
-    res.json({ user, posts });
+    res.json({ error: false, data: { user, posts } });
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({ error: true, code: "SERVER_ERROR", message: "Server error", details: error.message });
   }
 });
 
