@@ -246,18 +246,36 @@ export default function Signup() {
             </div>
 
             {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={loading}
-              className="auth-btn auth-btn-primary"
-            >
-              <span>{loading ? 'Creating account...' : "Let's go"}</span>
-              {!loading && (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                </svg>
-              )}
-            </button>
+<button
+  type="submit"
+  disabled={loading}
+  className="
+    auth-btn auth-btn-primary
+    transition-all duration-300 ease-in-out
+    hover:scale-105 hover:brightness-110
+    active:scale-95
+    focus-visible:ring-2 focus-visible:ring-indigo-400
+  "
+>
+  <span>{loading ? 'Creating account...' : "Let's go"}</span>
+
+  {!loading && (
+    <svg
+      className="w-4 h-4"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M13 7l5 5m0 0l-5 5m5-5H6"
+      />
+    </svg>
+  )}
+</button>
+
           </form>
         </div>
       </div>
